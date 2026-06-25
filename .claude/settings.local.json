@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where vcpkg *)",
+      "Bash(vcpkg install *)",
+      "Bash(vcpkg *)",
+      "Bash(cmake --preset x64-debug)",
+      "Bash(cmake --build out/build/x64-debug)",
+      "Bash(D:/Microsoft Visual Studio Projects/C ++/OpenGL/out/build/x64-debug/OpenGL/OpenGL.exe *)",
+      "Bash(cmd.exe *)",
+      "Bash(powershell *)",
+      "Bash(cmake --version)",
+      "Bash(curl *)",
+      "Bash(rm -f debug.log)",
+      "Bash(timeout 4 ./OpenGL.exe)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(timeout 15 ./OpenGL.exe)",
+      "Bash(timeout 5 ./OpenGL.exe)",
+      "Bash(timeout 20 ./OpenGL.exe)",
+      "Bash(cmake --build \"D:\\\\Microsoft Visual Studio Projects\\\\Cpp\\\\OpenGL\\\\out\\\\build\\\\x64-debug\")"
+    ]
+  }
+}
