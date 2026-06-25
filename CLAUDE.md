@@ -41,12 +41,11 @@ CMake POST_BUILD copies `shaders/`, `models/`, `textures/`, `audio/`, and `fonts
 | Space | Jump |
 | L-Ctrl | Toggle sprint/walk mode (persistent toggle, not hold). Sprint only activates when **holding W** (forward); S/A/D or backward movement stays at walk speed |
 | L-Shift | Sneak (hold) |
-| L-Shift | Sneak (hold) |
 | Left Mouse | Attack + combat raycast (1st-person: arm attack; 3rd-person: player attack) |
 | Right Mouse | Shoot arrow (25m/s velocity, from player eyes); **or hold to eat** when slot 3 (bread) is selected and HP < 20 |
 | Scroll Wheel | Cycle hotbar active slot (0–8) |
 | Keys 1–9 | Select hotbar slot directly |
-| F1 | Hot-reload sky shader from source directory |
+| F1 | Hot-reload all shaders from source directory |
 | F2 | Open time-of-day quick-select panel (4 buttons: 正午/黄昏/午夜/清晨 around screen center). Click a button to jump to that time. Mouse unlocked while open; mutually exclusive with T chat history |
 | F5 | Cycle camera mode (FirstPerson / ThirdPersonBack / ThirdPersonFront) |
 | F6 | Toggle collision debug wireframe |
@@ -104,14 +103,14 @@ Matrix computation:
  17. lightSpaceMatrix = ortho(-40,40,-40,40,1,100) * lookAt(lightPos, player, Up)
 
 Pass 1a — Shadow Map (FBO: depthMap, 4096×4096):
- 17-19. shadowShader → mapModel; shadowSkinnedShader → player(enemies (head unhide temporarily for 1st-person)
+ 17-19. shadowShader → mapModel; shadowSkinnedShader → player (only when `renderPlayerBody`, i.e. not FirstPerson) + enemies
 
 Pass 1b — Rain Occlusion Depth (FBO: rainDepthMap, 1024×1024, if rainIntensity > 0.01):
  20. shadowShader → mapModel only (no player)
 
 Pass 1.5 — G-Buffer Geometric Pre-Pass (FBO: gBuffer, RGBA16F × 2 + DEPTH24):
  21. gBufferShader → mapModel (view-space position + normal)
- 22. gBufferSkinnedShader → player, enemies, arrows, 3rd-person held items, FP arm/items
+ 22. gBufferSkinnedShader → player (only when `renderPlayerBody`), enemies, arrows, 3rd-person held items (FP arm/items intentionally excluded — they'd contaminate SSAO)
 
 Pass 1.8 — SSAO Generation (FBO: ssaoFBO, GL_RED):
  23. ssaoShader + fullscreenVAO: reads gPosition + gNormal + noiseTexture, 16-tap hemisphere sampling
@@ -152,6 +151,28 @@ Post-Processing:
 ```
 
 **⚠️ Player must be constructed after `gladLoadGLLoader()`** — constructor triggers OpenGL calls.
+
+## `renderPlayerBody` Guard (First-Person Self-Projection Prevention)
+
+A critical rendering invariant defined at the top of the `while` loop in `main.cpp`:
+
+```cpp
+bool renderPlayerBody = (thirdPersonCamera.CurrentMode != CameraMode::FirstPerson);
+```
+
+When the player is in FirstPerson mode, their world-space body model **must never** be written to any framebuffer (Shadow Map, G-Buffer, or main scene). The body would otherwise produce a ring-shaped "ghost shadow" on the ground and SSAO contamination.
+
+**All three `player.Draw()` call sites** are guarded by `renderPlayerBody`:
+
+| Pass | Shader | Guard |
+|------|--------|-------|
+| Pass 1 (Shadow Map) | `shadowSkinnedShader` | `if (renderPlayerBody)` |
+| Pass 1.5 (G-Buffer) | `gBufferSkinnedShader` | `if (renderPlayerBody)` |
+| Pass 2 (Main Scene) | `shader` (modelShader) | `if (renderPlayerBody)` |
+
+**Additionally**, FP arm (`armModel`) and FP held items (`hotbarModels[activeSlot]`) are **completely excluded from G-Buffer (Pass 1.5)** — they'd produce floating SSAO artifacts. They are only drawn in Pass 4 (after `glClear(GL_DEPTH_BUFFER_BIT)`) and in Pass 2's main scene pass.
+
+When adding a new rendering pass that draws the player, always check `renderPlayerBody`. When adding a new skinned model that should only appear in view space (like FP arm), ensure it is excluded from pre-passes.
 
 ## Dynamic Moonlight & Night Shadows
 
@@ -209,7 +230,7 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 
 `Shader::Reload()` re-reads from source tree (prepends `SHADER_SRC_DIR` compile definition), recompiles, atomically swaps GL program. On failure, old program preserved.
 
-**Only `sky.frag` is currently hot-reloadable** (F1 wired in main loop). All other shaders require application restart.
+**All shaders are hot-reloadable** via the `allShaders` vector in `main.cpp`. Pressing F1 iterates the vector and calls `Reload()` on every shader, printing a count to stdout. The `allShaders` list must be updated when a new shader is added.
 
 ## HDR / Bloom / ACES Tone Mapping
 
