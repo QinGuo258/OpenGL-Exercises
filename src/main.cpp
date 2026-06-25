@@ -2403,6 +2403,10 @@ int main()
 
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, glm::vec3(hbX, hbY, 0.0f));
+            // 中心轴上下翻转 180°
+            model = glm::translate(model, glm::vec3(hbWidth * 0.5f, hbHeight * 0.5f, 0.0f));
+            model = glm::scale(model, glm::vec3(1.0f, -1.0f, 1.0f));
+            model = glm::translate(model, glm::vec3(-hbWidth * 0.5f, -hbHeight * 0.5f, 0.0f));
             model = glm::scale(model, glm::vec3(hbWidth, hbHeight, 1.0f));
             uiShader.SetMat4("uModel", model);
             hotbarTex.Bind(0);
@@ -2415,6 +2419,10 @@ int main()
 
             model = glm::mat4(1.0f);
             model = glm::translate(model, glm::vec3(selX, selY, 0.0f));
+            // 中心轴上下翻转 180°
+            model = glm::translate(model, glm::vec3(selSize * 0.5f, selSize * 0.5f, 0.0f));
+            model = glm::scale(model, glm::vec3(1.0f, -1.0f, 1.0f));
+            model = glm::translate(model, glm::vec3(-selSize * 0.5f, -selSize * 0.5f, 0.0f));
             model = glm::scale(model, glm::vec3(selSize, selSize, 1.0f));
             uiShader.SetMat4("uModel", model);
             selectorTex.Bind(0);
