@@ -1,11 +1,11 @@
 # 🎮 OpenGL 3D Action Sandbox Game Engine
 
-> **从零实现的 3D 动作沙盒游戏引擎** — 纯 C++20 + OpenGL 4.6 Core Profile 手写实现，未使用任何第三方图形引擎或特效中间件。
+> **从零实现的 3D 渲染器** — 纯 C++20 + OpenGL 4.6 Core Profile 实现，未使用任何第三方图形引擎或特效中间件。
 
 <p align="center">
   <img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20">
   <img src="https://img.shields.io/badge/OpenGL-4.6%20Core-red.svg" alt="OpenGL 4.6">
-  <img src="https://img.shields.io/badge/MSVC-2022-purple.svg" alt="MSVC 2022">
+  <img src="https://img.shields.io/badge/MSVC-2026-purple.svg" alt="MSVC 2026">
   <img src="https://img.shields.io/badge/CMake-3.16%2B-green.svg" alt="CMake 3.16+">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg" alt="Windows">
 </p>
@@ -14,7 +14,7 @@
 
 ## 📖 项目简介
 
-本项目是一个**使用现代 C++20 和 OpenGL 4.6 Core Profile 从零实现的 3D 动作沙盒游戏引擎/框架**。每一行着色器代码、每一个矩阵运算、每一段物理逻辑均为手写实现，不依赖任何成品图形中间件。
+本项目是一个**使用现代 C++20 和 OpenGL 4.6 Core Profile 从零实现的 3D 渲染器**。每一行着色器代码、每一个矩阵运算、每一段物理逻辑均为从零开始借助AI实现，不依赖任何成品图形中间件。
 
 ### 核心特性
 
@@ -48,14 +48,14 @@
 | 需求 | 说明 |
 |------|------|
 | **操作系统** | Windows 10 / 11（仅支持 Windows） |
-| **编译器** | MSVC 2022 (Visual Studio 2022)，含"使用 C++ 的桌面开发"工作负载 |
+| **编译器** | MSVC 2026 (Visual Studio 2026 18.6.1)，含"使用 C++ 的桌面开发"工作负载 |
 | **CMake** | 3.16 或更高版本 |
 | **构建工具** | Ninja（可通过 VS Installer 安装或从 [ninja-build.org](https://ninja-build.org) 下载） |
 | **GPU** | 支持 OpenGL 4.6 Core Profile 的显卡（NVIDIA GTX 900+ / AMD GCN 4th Gen+） |
 
 ### 验证环境
 
-打开 **x64 Native Tools Command Prompt for VS 2022**，执行：
+打开 **x64 Native Tools Command Prompt for VS 2026**，执行：
 
 ```bash
 cmake --version    # ≥ 3.16
@@ -243,7 +243,7 @@ cmake --build out/build/x64-debug
 
 ### CMake 找不到 Ninja
 
-安装 Ninja 并确保在 PATH 中；或修改 `CMakePresets.json` 将 `generator` 改为 `"Visual Studio 17 2022"`。
+安装 Ninja 并确保在 PATH 中；或修改 `CMakePresets.json` 将 `generator` 改为 `"Visual Studio 18 2026"`。
 
 ### 中文注释乱码
 
