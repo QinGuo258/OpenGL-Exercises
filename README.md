@@ -39,15 +39,15 @@
 
 本项目是我在学习计算机图形学与 C++ 系统架构时的一个实践性沙盒引擎。
 
-在本项目开发过程中，我深度实践了 **AI 辅助编程（AI-Assisted Development）** 工作流。项目中的大部分核心数学推导（如 SSAO 的半球采样、体积云的光线步进积分、泊松圆盘滤波等）和着色器底层实现，是由我进行宏观系统设计与算法拆解后，依托 AI 工具（Claude）协助编写与优化的。
+在本项目开发过程中，我深度实践了 **AI 辅助编程** 工作流。项目中的大部分核心数学推导（如 SSAO 的半球采样、体积云的光线步进积分、泊松圆盘滤波等）和着色器底层实现，是由我配合AI进行宏观系统设计与算法拆解后，依托 AI 工具（Claude）协助编写与优化的。
 
 ### 我的核心工作与收获集中在：
 
-- **系统工程与管线架构**：统筹并打通了物理碰撞、双轨动画、后处理 FBO 链条与 UI 事件系统的复杂交互，处理了大量管线状态泄露与渲染排序问题。
+- **系统工程与管线架构**：统筹并打通了物理碰撞、双轨动画、后处理 FBO 链条与 UI 事件系统的复杂交互，处理了大量管线状态泄露与渲染排序问题，指出逻辑漏洞并引导 AI 修复。
 - **DCC 资产管线集成**：解决了建模软件（Blockbench/Blender）导出至 OpenGL 引擎中的各类骨骼坍缩、法线错位及顶点色烘焙难题。
-- **AI Prompt 工程实践**：通过将复杂的 3D 渲染需求拆解为精确的数学与图形学逻辑节点，验证了 AI 在大型 C++ 图形项目中的代码生成边界与重构能力。
+- **AI Prompt 工程实践**：通过将复杂的 3D 渲染需求拆解为一个个小型数学公式与逻辑，验证了 AI 在大型 C++ 图形项目中的代码生成边界与重构能力。
 
-本仓库仅作为我个人的技术探索基准（Baseline）和学习记录。
+本仓库仅作为我个人的学习与技术探索进程记录。
 
 ---
 
@@ -291,15 +291,13 @@ CMake POST_BUILD 会自动复制 `shaders/`、`models/`、`textures/`、`audio/`
 
 ### 🔊 纹理、UI 与音效
 
-- **原版纹理与音效（快捷栏、心形、水花声、弓箭射击等）**：提取自 Mojang Studios 的 *Minecraft Java Edition (1.21.x)*。这些素材的知识产权属于 [Mojang Studios / Microsoft](https://www.minecraft.net/)，本项目仅出于教育目的在合理使用（fair-use）范围内使用。
+- **原版纹理与音效（快捷栏、心形、水花声、弓箭射击等）**：提取自 Mojang Studios 的 *Minecraft Java Edition (1.21.10)*。这些素材的知识产权属于 [Mojang Studios / Microsoft](https://www.minecraft.net/)，本项目仅出于教育目的在合理使用（fair-use）范围内使用。
 - **水面法线贴图**：截取自 **ComplementaryReimagined_r5.6.1** 光影包。
 
 ### 🔠 字体
 
 - **TrueType 字体 (`font.ttf`)**：
-    - 若使用 Zpix：[Zpix（最像素）](https://github.com/SolidZGB/zpix-pixel-font) by *SolidZGB*（SIL Open Font License 1.1 授权）。
-    - 若使用 Galmuri：[Galmuri（갈무리）](https://github.com/orioncactus/galmuri) by *orioncactus*（SIL Open Font License 1.1 授权）。
-    - 若使用微软雅黑：*微软雅黑* by Microsoft Corporation。
+    使用 Zpix：[Zpix（最像素）](https://github.com/SolidZGB/zpix-pixel-font) by *SolidZGB*（SIL Open Font License 1.1 授权）。
 
 ---
 
@@ -313,11 +311,7 @@ CMake POST_BUILD 会自动复制 `shaders/`、`models/`、`textures/`、`audio/`
 
 ---
 
-## 📄 License
 
-本项目仅供学习和展示使用。
-
----
 
 <p align="center">
   <i>Copyright © 2025–2026</i>
