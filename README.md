@@ -279,20 +279,27 @@ CMake POST_BUILD 会自动复制 `shaders/`、`models/`、`textures/`、`audio/`
 
 ---
 
-## 📦 素材来源与版权声明 (Assets & Copyright)
+## 👥 素材来源与版权声明 (Credits & Asset Sources)
 
-### 游戏地图
+本项目是一个教育性质、非商业用途的实时渲染管线与游戏引擎架构学习项目。以下列出本项目使用的所有第三方素材与工具及其来源：
 
-- **地图名称**：Mr Mirror - Plains Village Transformation World (MAIN WORLD ONLY)
-- **YouTube 视频**：[https://www.youtube.com/watch?v=VV_-FWdcchI](https://www.youtube.com/watch?v=VV_-FWdcchI&t=9s)
-- **下载链接**：[Planet Minecraft](https://www.planetminecraft.com/project/mr-mirror-plains-village-transformation-world-main-world-only/)
+### 🎨 3D 模型与地图
 
-### 纹理与材质
+- **体素模型（僵尸、骷髅、手臂、剑、面包、绿宝石、火把）**：使用 [Blockbench](https://www.blockbench.net/) 建模、绑定骨骼并制作动画。
+- **地形地图（glb）**：从 *Minecraft Java Edition* 世界存档中通过 [Mineways](https://www.mineways.com/) 提取，并在 Blender 中进行后期处理。
+- **展示地图（Mr Mirror）**：*Mr Mirror - Plains Village Transformation World (MAIN WORLD ONLY)*，来源 [Planet Minecraft](https://www.planetminecraft.com/project/mr-mirror-plains-village-transformation-world-main-world-only/)（[YouTube 视频](https://www.youtube.com/watch?v=VV_-FWdcchI&t=9s)）。
 
-- 大部分材质纹理资源取自 **Minecraft 1.21.10** 版本的原版材质包
-- 水面法线贴图截取自 **ComplementaryReimagined_r5.6.1** 光影包
+### 🔊 纹理、UI 与音效
 
-> ⚠️ 本节内容为初步撰写，后续还将补充其他素材来源说明。
+- **原版纹理与音效（快捷栏、心形、水花声、弓箭射击等）**：提取自 Mojang Studios 的 *Minecraft Java Edition (1.21.x)*。这些素材的知识产权属于 [Mojang Studios / Microsoft](https://www.minecraft.net/)，本项目仅出于教育目的在合理使用（fair-use）范围内使用。
+- **水面法线贴图**：截取自 **ComplementaryReimagined_r5.6.1** 光影包。
+
+### 🔠 字体
+
+- **TrueType 字体 (`font.ttf`)**：
+    - 若使用 Zpix：[Zpix（最像素）](https://github.com/SolidZGB/zpix-pixel-font) by *SolidZGB*（SIL Open Font License 1.1 授权）。
+    - 若使用 Galmuri：[Galmuri（갈무리）](https://github.com/orioncactus/galmuri) by *orioncactus*（SIL Open Font License 1.1 授权）。
+    - 若使用微软雅黑：*微软雅黑* by Microsoft Corporation。
 
 ---
 
