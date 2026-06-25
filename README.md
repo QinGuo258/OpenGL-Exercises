@@ -279,6 +279,23 @@ CMake POST_BUILD 会自动复制 `shaders/`、`models/`、`textures/`、`audio/`
 
 ---
 
+## 📦 素材来源与版权声明 (Assets & Copyright)
+
+### 游戏地图
+
+- **地图名称**：Mr Mirror - Plains Village Transformation World (MAIN WORLD ONLY)
+- **YouTube 视频**：[https://www.youtube.com/watch?v=VV_-FWdcchI](https://www.youtube.com/watch?v=VV_-FWdcchI&t=9s)
+- **下载链接**：[Planet Minecraft](https://www.planetminecraft.com/project/mr-mirror-plains-village-transformation-world-main-world-only/)
+
+### 纹理与材质
+
+- 大部分材质纹理资源取自 **Minecraft 1.21.10** 版本的原版材质包
+- 水面法线贴图截取自 **ComplementaryReimagined_r5.6.1** 光影包
+
+> ⚠️ 本节内容为初步撰写，后续还将补充其他素材来源说明。
+
+---
+
 ## 📝 技术文档
 
 - **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** — 完整技术总结（渲染管线、动画系统、物理系统、AI、UI 架构）
