@@ -1,6 +1,6 @@
-# 🎮 OpenGL 3D Action Sandbox Game Engine
+# 🎮 Modern OpenGL 3D Rendering Framework / 基于现代 OpenGL 的 3D 渲染框架
 
-> **从零实现的 3D 渲染器** — 纯 C++20 + OpenGL 4.6 Core Profile 实现，未使用任何第三方图形引擎或特效中间件。
+> A forward rendering architecture featuring lightweight PBR, custom physics, and post-processing.
 
 <p align="center">
   <img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20">
@@ -37,7 +37,7 @@
 
 ## 📋 项目定位与开发声明 (Project Context & Disclaimer)
 
-本项目是我在学习计算机图形学与 C++ 系统架构时的一个实践性沙盒引擎。
+本项目是我在学习计算机图形学与 C++ 系统架构时的一个实践性引擎项目。
 
 在本项目开发过程中，我深度实践了 **AI 辅助编程** 工作流。项目中的大部分核心数学推导（如 SSAO 的半球采样、体积云的光线步进积分、泊松圆盘滤波等）和着色器底层实现，是由我配合AI进行宏观系统设计与算法拆解后，依托 AI 工具（Claude）协助编写与优化的。
 
