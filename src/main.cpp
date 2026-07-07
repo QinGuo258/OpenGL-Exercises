@@ -81,13 +81,8 @@ bool gFpIsAttacking = false;
 
 int activeSlot = 0;  // 快捷栏当前选中槽位 (0-8)
 
-// F3 调试屏幕
 bool showDebugScreen = false;
 bool f3KeyPressed = false;
-
-// F7 屏幕空间反射开关
-bool ssrEnabled = true;
-bool f7KeyPressed = false;
 
 // 中文 TrueType 字体渲染器
 FontRenderer fontRenderer;
@@ -1983,17 +1978,6 @@ int main()
             }
         }
 
-        // F7 屏幕空间反射开关（边缘触发）
-        {
-            static bool f7WasPressed = false;
-            bool f7Pressed = glfwGetKey(window, GLFW_KEY_F7) == GLFW_PRESS;
-            if (f7Pressed && !f7WasPressed) {
-                ssrEnabled = !ssrEnabled;
-                printf("[F7] SSR: %s\n", ssrEnabled ? "ON" : "OFF");
-            }
-            f7WasPressed = f7Pressed;
-        }
-
         // Debug Draw：碰撞三角形线框（绿色，F6 切换）
         static bool showDebugWireframe = false;
         {
@@ -2261,8 +2245,7 @@ int main()
         // ======================================================================
         // Pass SSR: 屏幕空间反射（半分辨率 960×540，读取 G-Buffer + HDR 场景）
         // ======================================================================
-        if (ssrEnabled) {
-            glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
             glViewport(0, 0, SSR_WIDTH, SSR_HEIGHT);
             glClear(GL_COLOR_BUFFER_BIT);
 
@@ -2294,9 +2277,8 @@ int main()
             glBindFramebuffer(GL_READ_FRAMEBUFFER, ssrFBO);
             glBindTexture(GL_TEXTURE_2D, ssrColorTexPrev);
             glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, SSR_WIDTH, SSR_HEIGHT);
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         // ======================================================================
         // Bloom Pass 1 — 亮部提取（半分辨率，提升性能 + 松软光晕感）

@@ -42,14 +42,13 @@ CMake POST_BUILD copies `shaders/`, `models/`, `textures/`, `audio/`, and `fonts
 | L-Ctrl | Toggle sprint/walk mode (persistent toggle, not hold). Sprint only activates when **holding W** (forward); S/A/D or backward movement stays at walk speed |
 | L-Shift | Sneak (hold) |
 | Left Mouse | Attack + combat raycast (1st-person: arm attack; 3rd-person: player attack) |
-| Right Mouse | Shoot arrow (25m/s velocity, from player eyes); **or hold to eat** when slot 3 (bread) is selected and HP < 20 |
+| Right Mouse | Hold to eat when slot 3 (bread) is selected and HP < 20 (1.5s hold → +4 HP) |
 | Scroll Wheel | Cycle hotbar active slot (0–8) |
 | Keys 1–9 | Select hotbar slot directly |
 | F1 | Hot-reload all shaders from source directory |
 | F2 | Open time-of-day quick-select panel (4 buttons: 正午/黄昏/午夜/清晨 around screen center). Click a button to jump to that time. Mouse unlocked while open; mutually exclusive with T chat history |
 | F5 | Cycle camera mode (FirstPerson / ThirdPersonBack / ThirdPersonFront) |
 | F6 | Toggle collision debug wireframe |
-| F7 | Toggle screen space reflections (SSR) |
 | R | Toggle rain on/off (2s smooth transition) |
 | F3 | Toggle debug overlay (XYZ coordinates + FPS, top-left) |
 | T | Toggle chat history overlay (shows last 12 messages; locks mouse & movement while open) |
@@ -277,7 +276,7 @@ Post-processing pass inserted after HDR scene assembly, before Bloom. **Reads G-
 | SSR per-material | `model.frag` | type 0: 0.12, 5: 0.40, 4: water path | Material reflectivity weights |
 | Fresnel F0 | `ssr.frag` | `0.04` | Schlick base reflectivity (dielectric) |
 
-**FBO routing**: SSR → `ssrFBO`/`ssrColorTex` (RGBA16F, 960×540) → copy to `ssrColorTexPrev` → next frame `model.frag` samples on TU11. Toggle with F7.
+**FBO routing**: SSR → `ssrFBO`/`ssrColorTex` (RGBA16F, 960×540) → copy to `ssrColorTexPrev` → next frame `model.frag` samples on TU11.
 
 ### God Rays (Crepuscular Rays)
 
