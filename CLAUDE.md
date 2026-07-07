@@ -234,7 +234,22 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 
 **All shaders are hot-reloadable** via the `allShaders` vector in `main.cpp`. Pressing F1 iterates the vector and calls `Reload()` on every shader, printing a count to stdout. The `allShaders` list must be updated when a new shader is added.
 
-**Startup auto-reload**: On launch, all shaders are automatically reloaded once to ensure the exe directory's shader copies are the latest versions from the source tree.
+**Startup auto-reload**: On launch, all shaders are automatically reloaded once to ensure the exe directory's shader copies are the latest versions from the source tree. `tuning.json` is also loaded on startup and reloaded on F1.
+
+### Runtime Tuning System (`tuning.json`)
+
+A `tuning.json` config file in `shaders/` stores rendering parameters that can be hot-reloaded at runtime. The `TuningConfig` struct parses this JSON and provides `Get(key, default)`, `GetInt(key, default)`, and `GetVec3(key, default)` methods.
+
+**On F1**: shaders reload → `tuning.json` reloads → next frame picks up new values automatically (all `gTuning.Get()` calls run every frame in the render loop).
+
+**Supported parameter categories**:
+- Lighting colors (dayLight, sunsetLight, moonLight, ambient, horizon, zenith)
+- Post-processing (bloomIntensity, exposure, godrayWeight/Density/Decay)
+- SSR (ssrMaxDistance, ssrRaySteps, ssrRefinementSteps)
+- Material (specularStrength, shininess)
+- Camera (defaultFov, sprintFov)
+
+Adding a new parameter: add its key to `tuning.json`, then replace the hardcoded value in `main.cpp` with `gTuning.Get("key", fallback)`.
 
 ## HDR / Bloom / ACES Tone Mapping
 

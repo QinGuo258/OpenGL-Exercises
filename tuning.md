@@ -1,7 +1,43 @@
 # 渲染效果调参指南
 
-> 所有 `shaders/*.frag` / `shaders/*.vert` 的改动按 **F1** 即可热加载生效，无需重新编译。
-> `src/main.cpp` 中的参数需重新构建项目后生效。
+> **两种调参方式**：
+> - **F1 热加载**：修改 `shaders/tuning.json` 中的数值 + 按 F1 → **立即生效，无需编译**
+> - **F1 热加载**：修改 `shaders/*.frag` / `shaders/*.vert` GLSL 源码 + 按 F1 → 立即生效
+> - **重新编译**：修改 `src/main.cpp` 中未被 `tuning.json` 覆盖的 C++ 参数需重编译
+
+> `tuning.json` 中可调的参数在下方表格中以 ★ 标注。
+
+---
+
+## tuning.json 热重载参数列表
+
+以下参数修改后按 **F1** 即时生效，无需编译：
+
+| 参数名 | 默认值 | 类型 | 说明 |
+|--------|--------|------|------|
+| `dayLight` | `[1.3, 1.15, 0.95]` | vec3 | 日光颜色 |
+| `sunsetLight` | `[1.0, 0.4, 0.1]` | vec3 | 日落光色 |
+| `moonLight` | `[0.01, 0.02, 0.04]` | vec3 | 月光颜色 |
+| `dayAmbient` | `[0.25, 0.35, 0.50]` | vec3 | 白昼环境光 |
+| `nightAmbient` | `[0.02, 0.02, 0.06]` | vec3 | 夜环境光 |
+| `dayHorizon` | `[0.55, 0.75, 0.95]` | vec3 | 白天地平线色 |
+| `dayZenith` | `[0.15, 0.35, 0.80]` | vec3 | 白天天顶色 |
+| `sunsetHorizon` | `[1.0, 0.45, 0.2]` | vec3 | 黄昏地平线 |
+| `sunsetZenith` | `[0.3, 0.1, 0.35]` | vec3 | 黄昏天顶 |
+| `nightHorizon` | `[0.05, 0.05, 0.12]` | vec3 | 夜景地平线 |
+| `nightZenith` | `[0.0, 0.0, 0.02]` | vec3 | 夜景天顶 |
+| `bloomIntensity` | `0.35` | float | Bloom 混合强度 |
+| `exposure` | `0.5` | float | HDR 曝光度 |
+| `godrayWeight` | `0.015` | float | 上帝光整体强度 |
+| `godrayDensity` | `1.0` | float | 上帝光拉扯距离 |
+| `godrayDecay` | `0.92` | float | 上帝光衰减速度 |
+| `ssrMaxDistance` | `15.0` | float | SSR 光线最大距离 |
+| `ssrRaySteps` | `40` | int | SSR 步进步数 |
+| `ssrRefinementSteps` | `4` | int | SSR 二分精炼次数 |
+| `specularStrength` | `0.5` | float | 镜面高光强度 |
+| `shininess` | `32.0` | float | 高光锐利度 |
+| `defaultFov` | `45.0` | float | 默认 FOV |
+| `sprintFov` | `55.0` | float | 疾跑 FOV |
 
 ---
 

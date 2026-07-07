@@ -16,6 +16,10 @@
 #include "miniaudio.h"
 #include <cstdlib>
 #include <random>
+#include <fstream>
+#include <string>
+#include <unordered_map>
+#include <cctype>
 
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1080;
@@ -632,6 +636,94 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
 }
 
+// ======================================================================
+// 运行时配置系统 — 从 tuning.json 读取可调参数，F1 热重载同步更新
+// ======================================================================
+struct TuningConfig {
+    std::unordered_map<std::string, float> vals;
+
+    float Get(const std::string& key, float def = 0.0f) const {
+        auto it = vals.find(key);
+        return it != vals.end() ? it->second : def;
+    }
+    int GetInt(const std::string& key, int def = 0) const {
+        auto it = vals.find(key);
+        return it != vals.end() ? (int)it->second : def;
+    }
+    glm::vec3 GetVec3(const std::string& key, const glm::vec3& def = glm::vec3(0.0f)) const {
+        return glm::vec3(
+            Get(key + "_x", def.x),
+            Get(key + "_y", def.y),
+            Get(key + "_z", def.z)
+        );
+    }
+
+    bool Load(const std::string& path) {
+        std::ifstream f(path);
+        if (!f) return false;
+        std::string content((std::istreambuf_iterator<char>(f)),
+                             std::istreambuf_iterator<char>());
+        vals.clear();
+
+        size_t pos = 0;
+        auto ws = [&]() { while (pos < content.size() &&
+            (content[pos] == ' ' || content[pos] == '\t' ||
+             content[pos] == '\n' || content[pos] == '\r')) pos++; };
+        auto peek = [&]() { return pos < content.size() ? content[pos] : '\0'; };
+
+        while (pos < content.size()) {
+            ws();
+            if (peek() == '\0') break;
+            if (peek() == '}' || peek() == '{' || peek() == ',') { pos++; continue; }
+            if (content[pos] == '/' && pos+1 < content.size() && content[pos+1] == '/') {
+                while (pos < content.size() && content[pos] != '\n') pos++;
+                continue;
+            }
+            if (peek() == '"') {
+                pos++;
+                std::string key;
+                while (pos < content.size() && content[pos] != '"') key += content[pos++];
+                pos++;
+                ws();
+                if (peek() == ':') pos++;
+                ws();
+                if (peek() == '[') {
+                    pos++; ws();
+                    float x = ParseNumber(content, pos); ws();
+                    if (peek() == ',') pos++; ws();
+                    float y = ParseNumber(content, pos); ws();
+                    if (peek() == ',') pos++; ws();
+                    float z = ParseNumber(content, pos);
+                    ws(); if (peek() == ']') pos++;
+                    vals[key + "_x"] = x; vals[key + "_y"] = y; vals[key + "_z"] = z;
+                } else {
+                    vals[key] = ParseNumber(content, pos);
+                }
+            } else { pos++; }
+        }
+        return true;
+    }
+
+private:
+    static float ParseNumber(const std::string& s, size_t& pos) {
+        std::string num;
+        while (pos < s.size() && (isdigit((unsigned char)s[pos]) ||
+               s[pos] == '.' || s[pos] == '-' || s[pos] == 'e' || s[pos] == 'E'))
+            num += s[pos++];
+        return num.empty() ? 0.0f : (float)atof(num.c_str());
+    }
+};
+
+static TuningConfig gTuning;
+
+static void ReloadTuning() {
+    if (gTuning.Load("shaders/tuning.json")) {
+        printf("[Tuning] Reloaded tuning.json (%zu params)\n", gTuning.vals.size());
+    } else {
+        fprintf(stderr, "[Tuning] Failed to load tuning.json\n");
+    }
+}
+
 int main()
 {
     gLogFile = fopen("debug.log", "w");
@@ -1198,7 +1290,7 @@ int main()
     int frameCount = 0;
     int currentFPS = 0;
     // 动态 FOV（疾跑时拉伸增强速度感）
-    float currentFOV = 45.0f;
+    float currentFOV = gTuning.Get("defaultFov", 45.0f);
     // 是否在疾跑模式下按 W 向前移动（影响 FOV 与速度的独立判定）
     bool  isMovingForward = false;
     // 风力相位累积器：每帧 += windSpeed * dt，避免 uTime * windSpeed 在降雨过渡时因
@@ -1232,6 +1324,9 @@ int main()
         }
         printf("[Shader] Startup hot-reload: %d/%zu shaders\n", reloaded, allShaders.size());
     }
+
+    // 启动时加载运行时配置
+    ReloadTuning();
 
     while (!glfwWindowShouldClose(window))
     {
@@ -1575,7 +1670,7 @@ int main()
         // ======================================================================
         {
             bool isActuallySprinting = player.IsRunningMode && isMovingForward && !player.IsSneaking;
-            float targetFOV = isActuallySprinting ? 55.0f : 45.0f;
+            float targetFOV = isActuallySprinting ? gTuning.Get("sprintFov", 55.0f) : gTuning.Get("defaultFov", 45.0f);
             currentFOV = glm::mix(currentFOV, targetFOV, deltaTime * 8.0f);
             thirdPersonCamera.SetFOV(currentFOV);
         }
@@ -1599,11 +1694,11 @@ int main()
         glm::vec3 currentLightColor;
         glm::vec3 currentAmbientColor;
 
-        glm::vec3 dayLight    = glm::vec3(1.3f, 1.15f, 0.95f);   // 温暖的阳光色
-        glm::vec3 sunsetLight = glm::vec3(1.0f, 0.4f, 0.1f);   // 橘红色黄昏
-        glm::vec3 moonLight   = glm::vec3(0.01f, 0.02f, 0.04f);  // 冷蓝色月光
-        glm::vec3 dayAmbient  = glm::vec3(0.25f, 0.35f, 0.50f); // 清透的冷蓝色阴影
-        glm::vec3 nightAmbient = glm::vec3(0.02f, 0.02f, 0.06f); // 深蓝色夜晚
+        glm::vec3 dayLight    = gTuning.GetVec3("dayLight",    glm::vec3(1.3f, 1.15f, 0.95f));  // 温暖的阳光色
+        glm::vec3 sunsetLight = gTuning.GetVec3("sunsetLight", glm::vec3(1.0f, 0.4f, 0.1f));    // 橘红色黄昏
+        glm::vec3 moonLight   = gTuning.GetVec3("moonLight",   glm::vec3(0.01f, 0.02f, 0.04f)); // 冷蓝色月光
+        glm::vec3 dayAmbient  = gTuning.GetVec3("dayAmbient",  glm::vec3(0.25f, 0.35f, 0.50f)); // 清透的冷蓝色阴影
+        glm::vec3 nightAmbient = gTuning.GetVec3("nightAmbient", glm::vec3(0.02f, 0.02f, 0.06f)); // 深蓝色夜晚
 
         if (sunY > 0.0f)
         {
@@ -1631,12 +1726,12 @@ int main()
         }
 
         // 天空盒颜色：与光照同步插值
-        glm::vec3 dayHorizon    = glm::vec3(0.55f, 0.75f, 0.95f);  // 地平线浅青/浅蓝
-        glm::vec3 dayZenith     = glm::vec3(0.15f, 0.35f, 0.80f);   // 天顶深邃蓝
-        glm::vec3 sunsetHorizon = glm::vec3(1.0f, 0.45f, 0.2f);      // 橙红
-        glm::vec3 sunsetZenith  = glm::vec3(0.3f, 0.1f, 0.35f);      // 紫
-        glm::vec3 nightHorizon  = glm::vec3(0.05f, 0.05f, 0.12f);    // 深灰蓝
-        glm::vec3 nightZenith   = glm::vec3(0.0f, 0.0f, 0.02f);      // 近黑
+        glm::vec3 dayHorizon    = gTuning.GetVec3("dayHorizon",    glm::vec3(0.55f, 0.75f, 0.95f)); // 地平线浅青/浅蓝
+        glm::vec3 dayZenith     = gTuning.GetVec3("dayZenith",     glm::vec3(0.15f, 0.35f, 0.80f)); // 天顶深邃蓝
+        glm::vec3 sunsetHorizon = gTuning.GetVec3("sunsetHorizon", glm::vec3(1.0f, 0.45f, 0.2f));  // 橙红
+        glm::vec3 sunsetZenith  = gTuning.GetVec3("sunsetZenith",  glm::vec3(0.3f, 0.1f, 0.35f));   // 紫
+        glm::vec3 nightHorizon  = gTuning.GetVec3("nightHorizon",  glm::vec3(0.05f, 0.05f, 0.12f)); // 深灰蓝
+        glm::vec3 nightZenith   = gTuning.GetVec3("nightZenith",   glm::vec3(0.0f, 0.0f, 0.02f));   // 近黑
 
         glm::vec3 currentHorizonColor;
         glm::vec3 currentZenithColor;
@@ -1849,8 +1944,8 @@ int main()
         shader.SetVec3("uLightDir", activeLightDir.x, activeLightDir.y, activeLightDir.z);
         shader.SetVec3("uLightColor", currentLightColor.x, currentLightColor.y, currentLightColor.z);
         shader.SetVec3("uAmbientColor", currentAmbientColor.x, currentAmbientColor.y, currentAmbientColor.z);
-        shader.SetFloat("uSpecularStrength", 0.5f);
-        shader.SetFloat("uShininess", 32.0f);
+        shader.SetFloat("uSpecularStrength", gTuning.Get("specularStrength", 0.5f));
+        shader.SetFloat("uShininess", gTuning.Get("shininess", 32.0f));
         shader.SetFloat("uRainIntensity", rainIntensity);
         shader.SetFloat("uTime", (float)glfwGetTime());
         shader.SetFloat("uWindPhase", windPhase);
@@ -2046,6 +2141,7 @@ int main()
                     ++reloaded;
                 }
                 printf("[Shader] Hot-reloaded %d/%zu shaders\n", reloaded, allShaders.size());
+                ReloadTuning();  // 同步重载运行时参数
             }
             f1WasPressed = f1Pressed;
         }
@@ -2261,9 +2357,9 @@ int main()
             ssrShader.SetMat4("uProjection", thirdPersonCamera.GetProjectionMatrix());
             ssrShader.SetVec2("uScreenSize", glm::vec2((float)SSR_WIDTH, (float)SSR_HEIGHT));
             ssrShader.SetVec2("uFullScreenSize", glm::vec2(1920.0f, 1080.0f));
-            ssrShader.SetFloat("uMaxDistance", 15.0f);
-            ssrShader.SetInt("uRaySteps", 40);
-            ssrShader.SetInt("uRefinementSteps", 4);
+            ssrShader.SetFloat("uMaxDistance", gTuning.Get("ssrMaxDistance", 15.0f));
+            ssrShader.SetInt("uRaySteps", gTuning.GetInt("ssrRaySteps", 40));
+            ssrShader.SetInt("uRefinementSteps", gTuning.GetInt("ssrRefinementSteps", 4));
 
             // G-Buffer 纹理 — 全分辨率（从半分辨率 SSR UV 采样全分辨率 G-Buffer）
             ssrShader.SetInt("gPosition", 0);
@@ -2316,7 +2412,7 @@ int main()
         glm::vec2 lightScreenPos = glm::vec2(lightPosNDC.x * 0.5f + 0.5f, lightPosNDC.y * 0.5f + 0.5f);
 
         // 只有光源跑到玩家视野正后方（NDC Z 越界）时才淡出上帝光
-        float godrayWeight = (lightPosNDC.z > 1.0f || lightPosNDC.z < -1.0f) ? 0.0f : 0.015f;
+        float godrayWeight = (lightPosNDC.z > 1.0f || lightPosNDC.z < -1.0f) ? 0.0f : gTuning.Get("godrayWeight", 0.015f);
 
         // 如果玩家没有回头，执行径向模糊
         if (godrayWeight > 0.0f) {
@@ -2327,8 +2423,8 @@ int main()
 
             godraysShader.Use();
             godraysShader.SetVec2("uLightScreenPos", lightScreenPos);
-            godraysShader.SetFloat("uDensity", 1.0f); // 拉扯距离
-            godraysShader.SetFloat("uDecay", 0.92f);   // 衰减速度
+            godraysShader.SetFloat("uDensity", gTuning.Get("godrayDensity", 1.0f)); // 拉扯距离
+            godraysShader.SetFloat("uDecay", gTuning.Get("godrayDecay", 0.92f));     // 衰减速度
             godraysShader.SetFloat("uWeight", godrayWeight);
 
             godraysShader.SetInt("uInputTex", 0);
@@ -2383,8 +2479,8 @@ int main()
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, pingpongColorTex[0]);
         hdrComposeShader.SetInt("uBloomTex", 1);
-        hdrComposeShader.SetFloat("uBloomIntensity", 0.35f);
-        hdrComposeShader.SetFloat("uExposure", 0.5f);
+        hdrComposeShader.SetFloat("uBloomIntensity", gTuning.Get("bloomIntensity", 0.35f));
+        hdrComposeShader.SetFloat("uExposure", gTuning.Get("exposure", 0.5f));
         glBindVertexArray(fullscreenVAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 

@@ -1,0 +1,34 @@
+{
+    // === Lighting — Colors ===
+    "dayLight":       [1.3, 1.15, 0.95],
+    "sunsetLight":    [1.0, 0.4, 0.1],
+    "moonLight":      [0.01, 0.02, 0.04],
+    "dayAmbient":     [0.25, 0.35, 0.50],
+    "nightAmbient":   [0.02, 0.02, 0.06],
+    "dayHorizon":     [0.55, 0.75, 0.95],
+    "dayZenith":      [0.15, 0.35, 0.80],
+    "sunsetHorizon":  [1.0, 0.45, 0.2],
+    "sunsetZenith":   [0.3, 0.1, 0.35],
+    "nightHorizon":   [0.05, 0.05, 0.12],
+    "nightZenith":    [0.0, 0.0, 0.02],
+
+    // === Post-Processing ===
+    "bloomIntensity":       0.35,
+    "exposure":             0.5,
+    "godrayWeight":         0.015,
+    "godrayDensity":        1.0,
+    "godrayDecay":          0.92,
+
+    // === Screen Space Reflections ===
+    "ssrMaxDistance":       15.0,
+    "ssrRaySteps":          40,
+    "ssrRefinementSteps":   4,
+
+    // === Material ===
+    "specularStrength":     0.5,
+    "shininess":            32.0,
+
+    // === Camera ===
+    "defaultFov":           45.0,
+    "sprintFov":            55.0
+}
