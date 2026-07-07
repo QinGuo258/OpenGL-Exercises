@@ -159,13 +159,13 @@ void main()
 
     // --- 湿润系数与水坑效果 ---
     // 1. 利用世界坐标 XZ 生成低频噪声水坑
-    float n = noise2D(FragPos.xz * 0.3); // 缩放因子控制水坑大小
+    float n = noise2D(FragPos.xz * 0.5); // 缩放因子控制水坑大小
 
     // 2. 只有向上的面才能积水 (法线 Y 大于 0.8)
     float upFactor = clamp((normal.y - 0.8) * 5.0, 0.0, 1.0);
 
     // 3. 随着雨变大，水坑面积扩张 (smoothstep 阈值动态降低)
-    float puddleMask = smoothstep(0.6 - uRainIntensity * 0.3, 0.7 - uRainIntensity * 0.3, n);
+    float puddleMask = smoothstep(0.8 - uRainIntensity * 0.3, 0.9 - uRainIntensity * 0.3, n);
 
     // 4. 综合湿润度：整体潮湿底色 + 明显的水坑
     float wetness = clamp(uRainIntensity * 0.3 + puddleMask * uRainIntensity, 0.0, 1.0) * upFactor;
