@@ -1169,6 +1169,9 @@ int main()
     float currentFOV = 45.0f;
     // 是否在疾跑模式下按 W 向前移动（影响 FOV 与速度的独立判定）
     bool  isMovingForward = false;
+    // 风力相位累积器：每帧 += windSpeed * dt，避免 uTime * windSpeed 在降雨过渡时因
+    // d(windSpeed)/dt 与 uTime 相乘产生巨大的频率尖峰（运行越久抖动越剧烈）
+    float windPhase = 0.0f;
 
     // ================= 主线剧情状态机 (Story System) =================
     enum class StoryState {
@@ -1315,6 +1318,10 @@ int main()
         // 降雨强度平滑过渡（约 2 秒内完成）
         float targetRain = isRaining ? 1.0f : 0.0f;
         rainIntensity += (targetRain - rainIntensity) * deltaTime * 0.2f;
+
+        // 风力相位累积：每帧按当前风速递增，避免 uTime * windSpeed 在降雨过渡时
+        // 因 d(windSpeed)/dt 项乘以巨大的 uTime 产生高频抖动
+        windPhase += (2.0f + rainIntensity * 4.0f) * deltaTime;
 
         // 玩家无敌时间递减
         if (playerImmunityTimer > 0.0f) playerImmunityTimer -= deltaTime;
@@ -1692,6 +1699,7 @@ int main()
         gBufferShader.SetMat4("uModel", mapModelMatrix);
         gBufferShader.SetFloat("uTime", (float)glfwGetTime());
         gBufferShader.SetFloat("uRainIntensity", rainIntensity);
+        gBufferShader.SetFloat("uWindPhase", windPhase);
         for (const auto& mesh : mapModel.GetMeshes())
         {
             if (mesh.materialType == 4) continue;
@@ -1805,6 +1813,8 @@ int main()
         shader.SetFloat("uShininess", 32.0f);
         shader.SetFloat("uRainIntensity", rainIntensity);
         shader.SetFloat("uTime", (float)glfwGetTime());
+        shader.SetFloat("uWindPhase", windPhase);
+        shader.SetBool("uDisableSsao", false);
 
         // 夜色系数：黄昏前后平滑过渡，太阳高度角在 0.15 到 -0.05 之间线性插值
         float nightFadeValue = glm::clamp(1.0f - (sunY + 0.05f) * 5.0f, 0.0f, 1.0f);
@@ -2130,6 +2140,10 @@ int main()
             shader.SetMat4("uView", glm::mat4(1.0f));
             shader.SetMat4("uProjection", thirdPersonCamera.GetProjectionMatrix());
             shader.SetBool("uIsHit", false);
+            shader.SetFloat("uWindPhase", windPhase);
+            // 第一人称手臂/物品禁用 SSAO：SSAO 贴图基于不含手臂的 G-Buffer 生成，
+            // 其遮蔽值代表背景而非手臂，会导致手臂出现"透视"到背景灰阶阴影的视觉错误。
+            shader.SetBool("uDisableSsao", true);
 
             if (hotbarModels[activeSlot] == nullptr)
             {
@@ -2186,6 +2200,9 @@ int main()
 
                 hotbarModels[activeSlot]->Draw(shader.ID());
             }
+
+            // 恢复 SSAO 状态，防止第一人称手臂的 uDisableSsao 泄漏
+            shader.SetBool("uDisableSsao", false);
         }
 
         // ======================================================================
@@ -2235,7 +2252,7 @@ int main()
 
             godraysShader.SetInt("uInputTex", 0);
             glActiveTexture(GL_TEXTURE0);
-            // 绑定刚提取出的高亮部分 (包含太阳)
+            // 绑定亮部提取图：shader 内通过距离遮罩只保留太阳附近的像素
             glBindTexture(GL_TEXTURE_2D, pingpongColorTex[0]);
 
             glBindVertexArray(fullscreenVAO);

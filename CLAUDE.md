@@ -145,7 +145,7 @@ Pass 6 — 2D UI (orthographic projection):
 
 Post-Processing:
  38. Bloom Pass 1: bright-pass extraction (threshold > 1.0) at 960×540 → pingpongColorTex[0]
- 39. God Rays Pass: if sun on-screen (godrayWeight > 0), radial blur from lightScreenPos reading pingpongColorTex[0] → pingpongColorTex[1]; if active, Gaussian blur starts from [1] instead of [0]
+ 39. God Rays Pass: if sun on-screen (godrayWeight > 0), radial blur reading pingpongColorTex[0] → pingpongColorTex[1], with distance mask filtering non-sun pixels; if active, Gaussian blur starts from [1] instead of [0]
  40. Bloom Pass 2: dual-pass Gaussian blur ping-pong (3H + 3V iterations)
  41. Bloom Pass 3: hdr_compose (scene+bloom → Reinhard → ACES → saturation boost → gamma)
 ```
@@ -215,7 +215,7 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 | `fullscreen.vert` | Single fullscreen quad (NDC [-1,1]²). Vertex shader for post-processing passes. |
 | `blur.frag` | Dual-mode: **bright-pass extraction** (luminance > 1.0 → keep) + **dual-pass Gaussian blur** (5-tap, 3H+3V). |
 | `hdr_compose.frag` | Final tone-mapping: scene+bloom blend → Reinhard exposure → ACES filmic → **saturation boost (1.25x)** → gamma 2.4. |
-| `godrays.frag` (+ `fullscreen.vert`) | Screen-space crepuscular rays: 60-step radial blur from sun screen position toward edge, exponential decay (uDecay=0.92), output stored in `pingpongColorTex[1]` then fed into Gaussian blur. |
+| `godrays.frag` (+ `fullscreen.vert`) | Screen-space crepuscular rays: 60-step radial blur from sun screen position toward edge, exponential decay (uDecay=0.92), **distance mask** (`smoothstep(0, 0.03, distToSun)`) filters non-sun bright pixels (clouds, emissives), output stored in `pingpongColorTex[1]` then fed into Gaussian blur. |
 
 ### Shader Uniform Dependencies
 
@@ -254,14 +254,15 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 
 ### God Rays (Crepuscular Rays)
 
-Screen-space radial blur post-processing pass, inserted between Bloom bright-pass extract and Gaussian blur.
+Screen-space radial blur post-processing pass, inserted between Bloom bright-pass extract and Gaussian blur. Reads from bright-pass `pingpongColorTex[0]`, but a **distance mask** inside `godrays.frag` only accepts samples within ~3% screen distance of the sun — preventing clouds and emissive blocks from producing false light beams.
 
 | Parameter | File:Line | Current | Effect |
 |-----------|-----------|---------|--------|
-| `godrayWeight` | `main.cpp` | `0.02f` | Master multiplier; 0 disables pass entirely (sun off-screen) |
+| `godrayWeight` | `main.cpp` | `0.015f` | Master multiplier; 0 disables pass entirely (sun off-screen) |
 | `uDensity` | `main.cpp` | `0.95f` | Radial step distance (higher = longer rays) |
 | `uDecay` | `main.cpp` | `0.92f` | Per-step exponential decay (closer to 1.0 = longer tails) |
 | `NUM_SAMPLES` | `godrays.frag` | `60` | Radial sampling steps |
+| `distance mask` | `godrays.frag` | `smoothstep(0, 0.03, distToSun)` | Clips non-sun bright pixels; 0.03 = ~3% screen width around sun |
 | `uLightScreenPos` | `main.cpp` | Computed from `activeLightDir` via VP-matrix NDC projection | Sun 2D position in [0,1]² |
 
 **FBO routing**: God rays read from `pingpongColorTex[0]` (bright-pass output) and write to `pingpongFBO[1]` / `pingpongColorTex[1]`. When active, Gaussian blur loop starts from `blurSourceTex=1` instead of 0, so god rays also receive smoothing.
