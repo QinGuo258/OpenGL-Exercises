@@ -1,6 +1,6 @@
 # shaders/ 目录着色器文件说明
 
-`shaders/` 下共 24 个 GLSL 文件：11 个顶点着色器（`.vert`）、13 个片段着色器（`.frag`）。全部使用 `#version 460 core`（OpenGL 4.6）。
+`shaders/` 下共 26 个 GLSL 文件：11 个顶点着色器（`.vert`）、15 个片段着色器（`.frag`）。全部使用 `#version 460 core`（OpenGL 4.6）。
 
 ---
 
@@ -29,6 +29,7 @@
   - [blur.frag](#blurfrag)
   - [hdr_compose.frag](#hdr_composefrag)
   - [godrays.frag](#godraysfrag)
+  - [ssr.frag](#ssrfrag)
   - [ui.frag](#uifrag)
   - [debug.frag](#debugfrag)
   - [grid.frag](#gridfrag)
@@ -400,12 +401,14 @@ finalColor = vec3(1.0) - exp(-finalColor * 1.0);
    - UV 缩放 0.06（大型连绵波浪）
    - 双层 R 通道采样（不同速度/方向）
    - 偏导数 → 法线扰动（强度 0.25，镜面般温润）
-2. **水底色**：`deepWater` / `shallowWater` 混合（夜间转为几乎纯黑）
-3. **天空反射**：视线反射采样天空颜色，菲涅尔加权
-4. **太阳/月光高光 Glint**：（修复后）`reflect(normalize(uLightDir), waterNorm)`
+2. **水底色**：`deepWater` / `shallowWater` 混合，蓝色通道降低（`waterBase * 0.3`），以反射为主导
+3. **SSR 反射**：通过 `uSsrMap`（纹理单元 11）采样屏幕空间反射颜色，天空回退（`R.y > 0` 时使用均匀天空颜色）
+4. **太阳/月光高光 Glint**：`reflect(normalize(uLightDir), waterNorm)`
    - 白天：`shininessFactor=256, glintIntensity=8.0` — 极锐利强光
    - 夜晚：`shininessFactor=64, glintIntensity=0.4` — 柔和微弱
 5. **透明度**：菲涅尔驱动 `0.12–0.75`，夜间加厚至 ~0.5
+
+**雨天积水反射**（非水面材质，`uMaterialType != 4`）：积水区域也使用 `uSsrMap` 采样 SSR 反射 + 天空颜色回退，增强雨天路面反射真实感。
 
 ---
 
@@ -600,7 +603,7 @@ skyColor = mix(uHorizonColor, uZenithColor, clamp(viewDir.y, 0, 1));
 
 ### `hdr_compose.frag`
 
-**用途**：最终色调映射（Pass 6）。将 HDR 场景+光晕合成为 LDR 屏幕输出。
+**用途**：最终色调映射（Pass 6）。将 HDR 场景+光晕合成为 LDR 屏幕输出。注意：SSR 反射的混合已在 `model.frag` 中按材质分别完成，`hdr_compose.frag` 仅负责 Bloom 合成与色调映射。
 
 | Uniform | 当前值 | 用途 |
 |---------|--------|------|
@@ -634,12 +637,54 @@ skyColor = mix(uHorizonColor, uZenithColor, clamp(viewDir.y, 0, 1));
 
 **核心逻辑**：
 
-1. 60 步径向采样：从当前像素沿指向光源的向量逐步收缩
-2. 每步采样亮部图 → 乘以衰减 → 累加
-3. 衰减按指数递减：`illuminationDecay *= 0.92`（指数衰减形成光线拖尾）
-4. 结果写入 `pingpongColorTex[1]`，随后输入高斯模糊
+1. **距离遮罩**：`smoothstep(0, 0.50, distToSun)` — 仅采样太阳附近的亮像素，过滤云层和自发光方块产生的假 God Ray
+2. 60 步径向采样：从当前像素沿指向光源的向量逐步收缩
+3. 每步采样亮部图 → 乘以距离遮罩和衰减 → 累加
+4. 衰减按指数递减：`illuminationDecay *= 0.92`（指数衰减形成光线拖尾）
+5. 结果写入 `pingpongColorTex[1]`，随后输入高斯模糊
 
 C++ 端控制：`godrayWeight = 0` 时跳过整个 God Rays Pass（太阳不在屏幕上）。
+
+---
+
+### `ssr.frag`
+
+**用途**：屏幕空间反射（Screen-Space Reflections）。在半分辨率下对 G-Buffer 进行视图空间线性 Ray-March，为水面和湿润表面提供实时反射。
+
+| 输入纹理 | 来源 |
+|----------|------|
+| `gPosition` | G-Buffer Pass（视图空间坐标） |
+| `gNormal` | G-Buffer Pass（视图空间法线） |
+| `uHdrColorTex` | HDR 场景颜色纹理（反射颜色源） |
+
+| 输出 | 格式 |
+|------|------|
+| `FragColor` | RGBA16F — 反射颜色 `.rgb`（alpha 通道预留） |
+
+| Uniform | 当前值 | 用途 |
+|---------|--------|------|
+| `uProjection` | 动态 | 投影矩阵（屏幕空间 → 视图空间反投影） |
+| `uScreenSize` | `(960, 540)` | 半分辨率视口尺寸 |
+| `uFullScreenSize` | `(1920, 1080)` | 全分辨率（UV 坐标换算） |
+| `uMaxDistance` | `15.0` | 最大反射距离（米） |
+| `uRaySteps` | `40` | 线性 Ray-March 步数 |
+| `uRefinementSteps` | `4` | 二分精炼步数 |
+
+**核心逻辑**：
+
+1. **视图空间 Ray-March**：从 G-Buffer 读取起始位置和法线 → 计算反射方向（`reflect(viewDir, normal)`）
+2. **40 步线性搜索**：沿反射方向等步长推进，每次将当前位置投影回屏幕空间，与 G-Buffer 深度比较
+3. **4 步二分精炼**：在检测到交叉点后，用二分搜索精确定位命中位置
+4. **天空回退**：反射方向指向天空（`R.y > 0`，即反射向量指向上半球）→ 直接输出黑色，由 `model.frag` 提供天空颜色回退
+5. **输出到 ssrFBO**：RGBA16F 半分辨率（960×540），供 `model.frag` 在纹理单元 11 采样
+
+**设计决策**：
+
+- **无菲涅尔计算**：菲涅尔加权由 `model.frag` 根据各材质特性分别处理
+- **半分辨率**：960×540，减少 Ray-March 开销至全分辨率的 1/4
+- **无时间累积/降噪**：保持实现简洁，依赖后续可能的模糊 Pass 平滑结果
+
+C++ 端控制：SSR Pass 在天空盒之后、第一人称手臂之前执行，读取 G-Buffer + HDR 场景颜色，输出到 `ssrFBO`。
 
 ---
 
@@ -705,6 +750,7 @@ C++ 端控制：`godrayWeight = 0` 时跳过整个 God Rays Pass（太阳不在�
 | 3 | 天空盒 | `sky.vert` | `sky.frag` | `hdrFBO` |
 | 4 | 第一人称手臂 | `g_buffer_skinned.vert`→`model.vert` | `model.frag` | `hdrFBO` |
 | 5 | 程序化雨 | `rain.vert` | `rain.frag` | `hdrFBO` |
+| — | SSR 屏幕空间反射 | `fullscreen.vert` | `ssr.frag` | `ssrFBO` (960×540) |
 | 6a | 2D UI | `ui.vert` | `ui.frag` | 默认 FBO |
 | 6b | 3D 粒子 | `ui.vert` | `ui.frag` | `hdrFBO` |
 | 6c | 字体渲染 | `ui.vert` | `ui.frag` | 默认 FBO |
@@ -760,6 +806,9 @@ model.frag (uMaterialType == 4):
 ### 后处理 FBO 路由
 
 ```
+gPosition + gNormal + hdrColorTex → ssr.frag (屏幕空间反射) → ssrFBO (RGBA16F, 960×540)
+    → 拷贝到 ssrColorTexPrev → 下一帧 model.frag 在 TU11 采样
+
 hdrFBO (RGBA16F) → blur.frag (亮部提取) → pingpong[0]
     → godrays.frag (径向模糊) → pingpong[1]  ← 仅当 sun 在屏幕上
     → blur.frag (3H+3V 高斯) → pingpong[0/1] 交替

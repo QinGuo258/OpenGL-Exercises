@@ -15,15 +15,15 @@
 | **VAO 创建** | 天空盒 unit cube、雨粒子 VBO-less (VAO only)、UI 2D quad、全屏 quad |
 | **游戏状态机** | `GameState { MENU, PLAYING }` — 主菜单与游戏中切换 |
 | **故事系统** | `StoryState` 6 阶段剧情脚本：游荡→动画→前往城门→防守→结局→完成 |
-| **多 Pass 渲染循环** | Shadow Map → G-Buffer → SSAO → SSAO Blur → Main Scene (HDR) → Particles → Skybox → FP Arm → Rain → 2D UI → Post-Processing (Bloom + God Rays + Tone Mapping) |
+| **多 Pass 渲染循环** | Shadow Map → G-Buffer → SSAO → SSAO Blur → Main Scene (HDR) → Particles → Skybox → FP Arm → Rain → 2D UI → Post-Processing (SSR + Bloom + God Rays + Tone Mapping) |
 | **玩家系统** | HP 20（10 颗心）、受伤无敌 0.5s、进食（面包 1.5s 回 4 HP）、死亡重生 |
 | **战斗系统** | 左键射线检测（3.5m）、剑/空手伤害、横扫之刃 AOE（3m 范围 + 90° 锥形）、击退 |
 | **粒子系统** | `DeathParticle`（敌人死亡烟雾 10 粒子 8 纹理变体）、`SweepParticle`（剑气 8 帧序列帧） |
 | **动态时间** | `timeOfDay` 弧度制，24 分钟一昼夜；F2 快速跳转面板（正午/黄昏/午夜/清晨） |
 | **天气系统** | R 键开关雨，2s 平滑过渡，`rainIntensity` 驱动着色器效果 |
-| **F1 热重载** | 仅 `sky.frag` 可从源码目录热重载 |
+| **F1 热重载** | 所有着色器通过 `allShaders` 向量遍历调用 `Reload()` 实现热重载 |
 | **UI 绘制** | 准星、血条心形、快捷栏（9 格）、物品图标、聊天记录（T 键）、F3 调试覆盖层 |
-| **音频** | miniaudio 引擎初始化、所有音效触发（挥剑/受伤/死亡/射箭/钟声） |
+| **音频** | miniaudio 引擎初始化、所有音效触发（挥剑/受伤/死亡/钟声） |
 
 ---
 

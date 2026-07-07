@@ -1,4 +1,4 @@
-# 项目算法清单 — OpenGL 游戏引擎
+# 项目算法清单 — OpenGL 渲染器
 
 > 全部 52 项算法原理已补充完毕 ✅
 
@@ -7,7 +7,7 @@
 | # | 章节 | 行号 | 内容 |
 |---|------|:---:|------|
 | 一 | [光照与着色](#一渲染--光照与着色) | 24 | Blinn-Phong、Shadow Map、PCF 软阴影、SSAO、G-Buffer、点光源 |
-| 二 | [后处理管线](#二渲染--后处理管线) | 52 | Bright-Pass、高斯模糊、God Rays、Reinhard/ACES 色调映射、饱和度、Gamma、距离雾 |
+| 二 | [后处理管线](#二渲染--后处理管线) | 52 | Bright-Pass、高斯模糊、God Rays、SSR、Reinhard/ACES 色调映射、饱和度、Gamma、距离雾 |
 | 三 | [天空与大气](#三渲染--天空与大气) | 88 | 天空盒、方块日月、星场、体积云、FBM 3D、HG 相位函数、IGN |
 | 四 | [水面](#四渲染--水面) | 327 | 有限差分法线、Fresnel-Schlick、Sun/Moon Glint |
 | 五 | [天气系统](#五渲染--天气系统) | 446 | 程序化雨、雨遮挡、湿润水坑、植被风摆 |
@@ -62,24 +62,103 @@
 ### 2.3 上帝光 (God Rays / Crepuscular Rays)
 - **文件**: `shaders/godrays.frag`、`src/main.cpp` (第 2250–2288 行)
 - **说明**: 60 步屏幕空间径向模糊。太阳 3D 位置 → NDC 投影 → 2D 屏幕坐标。每像素向太阳方向步进采样 Bright-Pass 输出图，每步指数衰减 (`uDecay=0.92`)，`uWeight=0.015`。太阳 NDC.z 越界（屏幕外）时跳过。结果写入 `pingpongColorTex[1]`，后续高斯模糊起点改为 `[1]`。
+- **距离遮罩**: 径向采样前对 Bright-Pass 输出做 `smoothstep(0, 0.50, distToSun)` 距离过滤——仅保留邻近太阳屏幕坐标的亮像素，防止云层 Bloom 和自发光方块 (materialType==3) 产生虚假的上帝光条纹。未命中太阳方向的像素即使通过了 Bright-Pass 阈值也不会向径向步进贡献能量。
 
-### 2.4 色调映射 — Reinhard
+### 2.4 屏幕空间反射 (Screen-Space Reflections, SSR)
+
+- **文件**: `shaders/ssr.frag`、`src/main.cpp` (SSR FBO 创建 + 渲染 Pass)
+
+#### 原理
+
+SSR 在屏幕空间内追踪反射光线，为水面、手持物品等光滑表面提供实时镜面反射。由于反射光线仅沿屏幕空间的可见像素行进，无需额外渲染场景，性能开销远低于平面反射或立方体贴图方案。
+
+#### 算法
+
+```
+1. 视空间线性光线步进:
+   reflectDir = reflect(-viewDir, surfaceNormal)  // 反射方向 (视空间)
+   rayPos = viewPos + reflectDir × startOffset    // 起始偏移 (避免自交)
+
+2. 40 步均匀步进:
+   每步: rayPos += reflectDir × stepSize
+   将 rayPos 投影回屏幕空间: screenUV = project(rayPos)
+   采样 G-Buffer 深度: sampledDepth = texture(gPosition, screenUV).z
+   检测交叉: (rayPos.z > sampledDepth) → 从"表面前方"越过"表面后方"
+   符号翻转检测: prevBehind × !currBehind → 命中!
+
+3. 4 步二分求精:
+   找到命中区间后, 二分法 4 次迭代将交点收敛到像素级精度
+
+4. 天空回退:
+   if 无命中 && reflectDir.y > 0 (反射方向朝上):
+     skyColor = texture(hdrColorTex, screenUV).rgb  // 采样 HDR 场景色 (含体积云)
+     ssrColor = skyColor
+```
+
+#### 半分辨率渲染
+
+SSR FBO 为 960×540 (`GL_RGBA16F`)，每帧仅处理约 21M 像素样本，对比全分辨率 1920×1080 约 83M 样本，性能提升约 4 倍。半分辨率下镜面细节略有损失，但经过 bilateral 上采样后视觉差异不显著。
+
+#### 前一帧重投影 (Previous-Frame Reprojection)
+
+SSR 是屏幕空间算法——反射结果依赖当前帧的 HDR 场景颜色，而 HDR 场景颜色在 Pass 2 才完整生成，形成"鸡与蛋"问题。解决方案：
+
+```
+每帧流程:
+  Pass 2 (Main Scene):
+    model.frag 从纹理单元 11 采样 uSsrMap (ssrColorTexPrev)
+    → 使用上一帧的 SSR 输出作为本帧的反射源
+
+  Pass (SSR 生成, 在 Pass 2 之后):
+    ssr.frag 从 G-Buffer 读取法线 + 视空间位置
+    → 光线步进 → 采样当前帧 hdrColorTex 作天空回退
+    → 输出到 ssrColorTex
+
+  帧尾:
+    glCopyImageSubData(ssrColorTex → ssrColorTexPrev)
+    → 下一帧的 model.frag 即可使用
+```
+
+#### 按材质类型的 Fresnel 反射混合
+
+不同材质表面使用不同的反射率策略（在 `model.frag` 中按 `uMaterialType` 分支）：
+
+| 材质类型 | 反射行为 |
+|---------|---------|
+| 水 (materialType==4) | `F0 = 0.02`, Schlick 插值至 0.98。反射色 = `mix(skyColor, ssrReflect, clamp(ssrLum × 2.0, 0, 1))` |
+| 手持物品 (materialType==5) | Schlick Fresnel × 0.5 (保守抑制, 保持材质本色) |
+| 地面/植被/树叶/自发光 (0/1/2/3) | 反射率为零——不做 SSR |
+
+#### 距离遮罩
+
+在 SSR 着色器中应用两种距离衰减防止屏幕边缘伪影：
+
+```
+float edgeFade = smoothstep(0, 0.1, uv.x) × smoothstep(0, 0.1, 1-uv.x)
+               × smoothstep(0, 0.1, uv.y) × smoothstep(0, 0.1, 1-uv.y);
+float distAtten = exp(-rayDist × 0.02);  // 距离衰减
+ssrColor *= edgeFade × distAtten;
+```
+
+屏幕边缘的反射光线大概率命中屏幕外区域（无几何信息），`edgeFade` 平滑消隐防止硬边。`distAtten` 使远处反射自然减弱。
+
+### 2.5 色调映射 — Reinhard
 - **文件**: `shaders/hdr_compose.frag` (第 23 行)
 - **说明**: `result = vec3(1.0) - exp(-result × uExposure)`，`uExposure=0.5`。HDR 值压缩到 [0,1]，高亮区域逐渐饱和但不硬截断。\$C \to 0\$ 近似线性，\$C \to \infty\$ 趋近于 1。
 
-### 2.5 色调映射 — ACES Filmic
+### 2.6 色调映射 — ACES Filmic
 - **文件**: `shaders/hdr_compose.frag` (第 10–13 行)
 - **说明**: Narkowicz 有理函数拟合：`ACES(x) = clamp((x(2.51x+0.05))/(x(2.43x+0.59)+0.16), 0, 1)`。S 形曲线在暗部保持对比度、亮部柔和滚降（filmic toe & shoulder）。与 Reinhard 双阶段串联：`ACES(Reinhard(color))`。
 
-### 2.6 饱和度增强
+### 2.7 饱和度增强
 - **文件**: `shaders/hdr_compose.frag` (第 29–32 行)
 - **说明**: 亮度保持法：提取 BT.709 亮度 → `mix(grayColor, result, 1.25)`。色度分量放大 25%，亮度不变，补偿色调映射的颜色衰减。
 
-### 2.7 Gamma 校正
+### 2.8 Gamma 校正
 - **文件**: `shaders/hdr_compose.frag` (第 35 行)
 - **说明**: `pow(result, vec3(1.0/2.4))`，sRGB 标准 gamma。必须在所有颜色计算之后执行，匹配显示器的非线性 EOTF 响应。
 
-### 2.8 大气距离雾 (Exponential-Squared Distance Fog)
+### 2.9 大气距离雾 (Exponential-Squared Distance Fog)
 - **文件**: `shaders/model.frag` (第 279–285 行)
 - **说明**: `fogFactor = exp(-pow(dist × density, 2.0))`。指数平方使近景几乎不受影响、中远景逐渐起雾、远景完全覆盖。晴天密度 0.0005 雾色淡蓝 `(0.6,0.8,0.95)`，雨天密度 0.005 雾色阴灰 `(0.4,0.45,0.5)`，随 `uRainIntensity` 平滑插值。
 
@@ -396,14 +475,25 @@ fresnel = 0.02 + 0.98 × pow(1 - cosTheta, 5.0)
 
 #### 反射色来源
 
-水面**不采样真实环境贴图**，而是直接使用 C++ 传入的昼夜动态天空色作为反射源：
+水面使用**屏幕空间反射 (SSR)** 作为主反射源，天空色仅作回退：
 
 ```
 viewReflect = reflect(-viewDir, waterNormal)
+
+// 从纹理单元 11 采样前一帧 SSR 输出
+ssrReflect = texture(uSsrMap, screenUV).rgb
+
+// 天空回退 (SSR 未命中或反射方向朝上时)
 skyColor = mix(uHorizonColor, uZenithColor, clamp(viewReflect.y, 0, 1))
+
+// SSR 亮度加权混合 (暗部回退天空, 亮部取 SSR)
+ssrLum = dot(ssrReflect, vec3(0.299, 0.587, 0.114))
+reflectionColor = mix(skyColor, ssrReflect, clamp(ssrLum × 2.0, 0, 1))
 ```
 
-视线越平，越反射地平线色（白天淡蓝 `0.55,0.75,0.95`），往上看则反射天顶色（白天深蓝 `0.15,0.35,0.80`）。这保证了深夜的天空倒影自动变暗（C++ 侧 `uHorizonColor` 在夜晚已降为 `0.05,0.05,0.12`）。
+视线越平，越反射地平线色（白天淡蓝 `0.55,0.75,0.95`），往上看则反射天顶色（白天深蓝 `0.15,0.35,0.80`）。这保证了深夜的天空倒影自动变暗（C++ 侧 `uHorizonColor` 在夜晚已降为 `0.05,0.05,0.12`）。SSR 命中时由亮度阈值决定切换权重——暗区域（如树木倒影）回退天空色，亮区域（如天空在水面上的反射）直接使用 SSR 采样。
+
+水面底色乘以 0.3 (`waterBaseColor × 0.3`) 以确保反射主导水面外观，底色仅提供色调和深度暗示。
 
 #### 夜间抑制
 
@@ -528,6 +618,9 @@ Pass 5 — 雨滴渲染:
 #### 算法
 
 ```
+0. 水面排除:
+   if (uMaterialType == 4) return   // 水面有自己的 Fresnel-SSR 反射, 跳过水坑
+
 1. 水坑噪声:
    n = noise2D(FragPos.xz × 0.3)       // 低频值噪声 → 水坑形状
    upFactor = clamp((normal.y - 0.8) × 5, 0, 1)  // 只有朝上的面才积水
@@ -537,16 +630,29 @@ Pass 5 — 雨滴渲染:
    // 雨小时 threshold ≈ 0.6 → 只有少量噪声峰值形成水坑
    // 雨大时 threshold ≈ 0.3 → 一半以上面积形成水坑
 
-3. 综合湿润度:
-   wetness = clamp(rainIntensity × 0.3 + puddleMask × rainIntensity, 0, 1)
-           × upFactor
+3. 连续坡度衰减:
+   slopeDamp = clamp(normal.y² × 3.0, 0, 1)
+   // 陡坡上水坑自然减少 (normal.y < 0.577 时 slopeDamp < 1.0)
+   // 平坦表面 (normal.y ≈ 1.0) 无衰减, 替代硬阈值 upFactor 的部分作用
 
-4. 湿润引起的材质变化:
+4. 综合湿润度:
+   wetness = clamp(rainIntensity × 0.3 + puddleMask × rainIntensity, 0, 1)
+           × upFactor × slopeDamp
+
+5. 湿润引起的材质变化:
    albedoColor ×= mix(1.0, 0.5, wetness)        // 泥土吸水变深 50%
    shininess = mix(default, 256.0, wetness)      // 光滑积水
    specStrength = mix(default, 1.0, wetness)      // 满反射
 
-5. 微表面涟漪扰动:
+6. 水坑反射 (SSR + 天空回退, 叠加混合):
+   if (puddleMask > 0.01):
+     ssrReflect = texture(uSsrMap, screenUV).rgb
+     skyFallback = mix(uHorizonColor, uZenithColor, clamp(reflectDir.y, 0, 1))
+     ssrLum = dot(ssrReflect, vec3(0.299, 0.587, 0.114))
+     puddleReflect = mix(skyFallback, ssrReflect, clamp(ssrLum × 2.0, 0, 1))
+     finalColor += puddleReflect × puddleMask × rainIntensity × 0.3  // 叠加混合, 不替换底色
+
+7. 微表面涟漪扰动:
    if (wetness > 0.01):
      microNoise = noise2D(FragPos.xz × 15 + time × 2)
      normal.x += (microNoise - 0.5) × 0.03 × wetness
