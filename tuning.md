@@ -43,13 +43,18 @@
 
 ## 一、天空与云层
 
-### 天空颜色
+### 天空颜色 ★
 
-| 参数 | 文件 | 位置 | 说明 |
-|------|------|------|------|
-| 白天地平线/天顶色 | `main.cpp` | `dayHorizon` / `dayZenith` | 晴天地平线淡蓝 `(0.55,0.75,0.95)`，天顶深蓝 `(0.15,0.35,0.80)` |
-| 黄昏地平线/天顶色 | `main.cpp` | `sunsetHorizon` / `sunsetZenith` | 橙红 `(1.0,0.45,0.2)` / 紫 `(0.3,0.1,0.35)` |
-| 夜空地平线/天顶色 | `main.cpp` | `nightHorizon` / `nightZenith` | 几乎黑 `(0.05,0.05,0.12)` |
+> 以下 6 组色值均可通过 `tuning.json` + F1 热重载，无需编译。
+
+| 参数 | tuning.json 键名 | 说明 |
+|------|-----------------|------|
+| 白天地平线色 | `dayHorizon` | 晴天地平线淡蓝 `[0.55,0.75,0.95]` |
+| 白天天顶色 | `dayZenith` | 天顶深蓝 `[0.15,0.35,0.80]` |
+| 黄昏地平线色 | `sunsetHorizon` | 橙红 `[1.0,0.45,0.2]` |
+| 黄昏天顶色 | `sunsetZenith` | 紫色 `[0.3,0.1,0.35]` |
+| 夜景地平线色 | `nightHorizon` | 深灰蓝 `[0.05,0.05,0.12]` |
+| 夜景天顶色 | `nightZenith` | 近纯黑 `[0.0,0.0,0.02]` |
 
 ### 太阳 / 月亮
 
@@ -81,16 +86,19 @@
 
 ## 二、光照与阴影
 
-### 昼夜光照
+### 昼夜光照 ★
 
-| 参数 | 文件 | 位置 | 说明 |
-|------|------|------|------|
-| 日光颜色 | `main.cpp` | `dayLight = (1.3, 1.15, 0.95)` | 暖色日光 |
-| 日落光色 | `main.cpp` | `sunsetLight = (1.0, 0.4, 0.1)` | 橙红晚霞光 |
-| 月光颜色 | `main.cpp` | `moonLight = (0.01, 0.02, 0.04)` | 极暗冷月光 |
-| 白昼环境光 | `main.cpp` | `dayAmbient = (0.25, 0.35, 0.50)` | 阴影区域补光 |
-| 夜晚环境光 | `main.cpp` | `nightAmbient = (0.02, 0.02, 0.06)` | 夜间很深暗 |
-| 时间流速 | `main.cpp` | `timeScale` | 昼夜循环速度 |
+> 以下 5 组光照参数均可通过 `tuning.json` + F1 热重载，无需编译。
+
+| 参数 | tuning.json 键名 | 说明 |
+|------|-----------------|------|
+| 日光颜色 | `dayLight` | 暖色日光 `[1.3, 1.15, 0.95]` |
+| 日落光色 | `sunsetLight` | 橙红晚霞光 `[1.0, 0.4, 0.1]` |
+| 月光颜色 | `moonLight` | 极暗冷月光 `[0.01, 0.02, 0.04]` |
+| 白昼环境光 | `dayAmbient` | 阴影区域补光 `[0.25, 0.35, 0.50]` |
+| 夜晚环境光 | `nightAmbient` | 夜间很深暗 `[0.02, 0.02, 0.06]` |
+
+| 时间流速 | `main.cpp` | `timeScale` — 昼夜循环速度（仍需重编译） |
 
 ### 软阴影
 
@@ -157,15 +165,27 @@
 
 ## 四、屏幕空间反射 (SSR)
 
+### 热重载参数 ★ (`tuning.json` + F1)
+
+| 参数 | tuning.json 键名 | 说明 |
+|------|-----------------|------|
+| 光线最大距离 | `ssrMaxDistance` | `15.0` 米 — 调大反射更远；调小仅反射近处 |
+| 线步进步数 | `ssrRaySteps` | `40` — 调大命中更精确（略吃性能） |
+| 二分精炼次数 | `ssrRefinementSteps` | `4` — 调大交点更精准；0 跳过精炼 |
+
+### Shader 内参数 (F1 热加载)
+
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| 光线最大距离 | `main.cpp` SSR pass | `uMaxDistance = 15.0` (米) |
-| 线步进步数 | `main.cpp` SSR pass | `uRaySteps = 40` |
-| 二分精炼次数 | `main.cpp` SSR pass | `uRefinementSteps = 4` |
-| 输出分辨率 | `main.cpp` SSR FBO | `SSR_WIDTH/HEIGHT = 960/540` |
 | 天空回落亮度 | `ssr.frag:151` | `distAtten = 1.0` — 被遮挡时回落天空的亮度 |
 | 地面 (type 0) 反射率 | `model.frag:286` | `ssrWeight = 0.0` — 当前关闭 |
 | 手持道具 (type 5) 反射率 | `model.frag:287` | `mix(0.04, 1.0, grazingFresnel) * 0.5` |
+
+### 不可热重载 (需重编译)
+
+| 参数 | 位置 | 说明 |
+|------|------|------|
+| 输出分辨率 | `main.cpp` SSR FBO | `SSR_WIDTH/HEIGHT = 960/540` |
 
 ---
 
@@ -201,13 +221,20 @@
 
 ## 六、上帝光 (God Rays)
 
+### 热重载参数 ★ (`tuning.json` + F1)
+
+| 参数 | tuning.json 键名 | 说明 |
+|------|-----------------|------|
+| 整体强度 | `godrayWeight` | `0.015` — 调大光柱更亮；0 完全消失 |
+| 光线密度 | `godrayDensity` | `1.0` — 越大光线向内拉伸更长 |
+| 衰减速度 | `godrayDecay` | `0.92` — 越接近 1.0 尾越长 |
+
+### Shader 内参数 (F1 热加载)
+
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| 整体强度 | `main.cpp` | `godrayWeight = 0.015` |
-| 光线密度/拖尾 | `main.cpp` | `uDensity = 0.95` — 越大光线越长 |
-| 衰减速度 | `main.cpp` | `uDecay = 0.92` — 越接近 1 尾越长 |
 | 采样步数 | `godrays.frag:12` | `NUM_SAMPLES = 60` |
-| 非太阳像素过滤半径 | `godrays.frag:29` | `smoothstep(0, 0.50, distToSun)` — 越大越纯净（少混入云） |
+| 非太阳像素过滤半径 | `godrays.frag:29` | `smoothstep(0, 0.50, distToSun)` — 越大越纯净 |
 
 ---
 
@@ -223,10 +250,17 @@
 
 ## 八、HDR / Bloom / 色调映射
 
+### 热重载参数 ★ (`tuning.json` + F1)
+
+| 参数 | tuning.json 键名 | 说明 |
+|------|-----------------|------|
+| Bloom 混合强度 | `bloomIntensity` | `0.35` — 调大光晕更显眼；调小更清淡 |
+| 曝光度 | `exposure` | `0.5` — 调大整体更亮；调小整体变暗 |
+
+### Shader 内参数 (F1 热加载)
+
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| Bloom 混合强度 | `main.cpp` | `uBloomIntensity = 0.35` |
-| 曝光度 | `main.cpp` | `uExposure = 0.5` |
 | 亮部提取阈值 | `blur.frag:15` | `brightness > 1.4` — 越低越多像素参与 Bloom |
 | 饱和度增强 | `hdr_compose.frag:29` | `saturation = 1.25` |
 | Gamma | `hdr_compose.frag:35` | `pow(result, 1.0/2.4)` |
