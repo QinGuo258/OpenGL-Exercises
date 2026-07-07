@@ -30,7 +30,7 @@
 | **中文 UI** | stb_truetype 烘焙 21,000+ 汉字 (8192² GL_RED 图集)、像素级对齐 HUD、UTF-8 解码 |
 | **故事系统** | 6 阶段脚本化线性叙事 (纯代码驱动)、电影级过场、对话/消息系统 |
 | **3D 音效** | miniaudio 引擎、MP3 解码 + 空间定位、8+ 音效文件 |
-| **Shader 热重载** | F1 全 Shader 热重载、编译失败旧程序保留不崩溃 |
+| **Shader 热重载与调参** | F1 全 Shader 热重载 + `tuning.json` 运行时参数配置（编译失败旧程序保留），28 个可调参数无需重编译 |
 
 ---
 
@@ -182,7 +182,7 @@ cmake --build out/build/x64-debug
 | **鼠标右键** | 手持面包时按住吃饭（HP<20 时回复 4 HP，1.5s 读条） |
 | **滚轮** | 循环切换快捷栏（0–8） |
 | **1–9** | 直接选择快捷栏槽位 |
-| **F1** | 热重载全部着色器 |
+| **F1** | 热重载全部着色器 + 同步加载 `tuning.json` 参数 |
 | **F2** | 打开时间选择面板（正午/黄昏/午夜/清晨） |
 | **F3** | 调试信息覆盖层（坐标 + FPS） |
 | **F5** | 切换相机模式（第一人称/第三人称后/第三人称前） |
@@ -202,7 +202,7 @@ OpenGL/
 ├── OpenGL/                     # CMake 可执行目标
 │   └── CMakeLists.txt          # 源文件列表 + POST_BUILD 资源复制
 ├── src/                        # 项目源代码（见下方说明）
-├── shaders/                    # GLSL 着色器（*.vert / *.frag，20+ 个文件）
+├── shaders/                    # GLSL 着色器（.vert / .frag，26 个文件）+ tuning.json 运行时参数
 ├── models/                     # 3D 模型文件（*.glb）
 │   ├── map.zip                 # 大地图（需解压，见编译步骤）
 │   ├── player.glb              # 玩家模型
@@ -302,7 +302,7 @@ CMake POST_BUILD 会自动复制 `shaders/`、`models/`、`textures/`、`audio/`
 
 ## 📝 技术文档
 
-- **[tuning.md](tuning.md)** — 渲染效果调参指南（天空、水面、SSR、雨水、上帝光等所有可调参数速查）
+- **[tuning.md](tuning.md)** — 渲染效果调参指南（天空/水面/SSR/上帝光等参数速查 + `tuning.json` 热重载说明）
 - **[CLAUDE.md](CLAUDE.md)** — AI 辅助开发文档（含渲染循环顺序、着色器清单、材质类型系统）
 - **[algorithm.md](algorithm.md)** — 核心算法推导（阴影、SSAO、水面、体积云）
 - **[shader.md](shader.md)** — 着色器详细说明与 Uniform 依赖
