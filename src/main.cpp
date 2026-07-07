@@ -1779,15 +1779,21 @@ int main()
         }
 
         // 1b. 渲染动态角色深度（使用骨骼动画阴影着色器）
-        // 玩家始终写入 Shadow Map（包括头部）。第一人称时临时
-        // 关闭头部隐藏，否则头部骨骼缩放为 0 → 头部不投射阴影。
+        // 玩家始终写入 Shadow Map（包括头部）。第一人称时骨骼缓存
+        // 中头骨已缩放为 0，需强制重算一次动画矩阵以确保头部投射阴影。
         shadowSkinnedShader.Use();
         shadowSkinnedShader.SetMat4("uLightSpaceMatrix", lightSpaceMatrix);
 
         bool wasHeadHidden = (thirdPersonCamera.CurrentMode == CameraMode::FirstPerson);
-        if (wasHeadHidden) player.GetAnimator().SetHideHead(false);
+        if (wasHeadHidden) {
+            player.GetAnimator().SetHideHead(false);
+            player.UpdateAnimation(0.0f); // 强制重算骨骼矩阵（不推进动画时间）
+        }
         player.Draw(shadowSkinnedShader);
-        if (wasHeadHidden) player.GetAnimator().SetHideHead(true);
+        if (wasHeadHidden) {
+            player.GetAnimator().SetHideHead(true);
+            player.UpdateAnimation(0.0f); // 恢复
+        }
 
         // 1c. 渲染敌怪深度（使用骨骼动画阴影着色器）
         for (auto& enemy : enemies)
