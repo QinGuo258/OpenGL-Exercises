@@ -1,0 +1,2 @@
+# 将第三方依赖库标记为 vendored，GitHub 语言统计时排除
+external/** linguist-vendored
