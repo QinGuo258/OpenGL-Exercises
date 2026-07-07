@@ -1222,9 +1222,20 @@ int main()
 
     // AddChatMessage 推迟到玩家点击"开始游戏"按钮时触发
 
+    // 启动时自动执行一次全部着色器热重载，确保 exe 目录中的最新版本被加载
+    {
+        int reloaded = 0;
+        for (auto* shaderPtr : allShaders)
+        {
+            shaderPtr->Reload();
+            ++reloaded;
+        }
+        printf("[Shader] Startup hot-reload: %d/%zu shaders\n", reloaded, allShaders.size());
+    }
+
     while (!glfwWindowShouldClose(window))
     {
-        // 绝对渲染锁：第一人称下，玩家的世界模型（身体）绝对不允许出现在任何缓冲区中！
+        // 绝对渲染锁：第一人称下，玩家的世界模型（身体）绝对不允许出现在 G-Buffer 和主场景中！
         bool renderPlayerBody = (thirdPersonCamera.CurrentMode != CameraMode::FirstPerson);
 
         float currentFrame = static_cast<float>(glfwGetTime());
@@ -1673,14 +1684,11 @@ int main()
         }
 
         // 1b. 渲染动态角色深度（使用骨骼动画阴影着色器）
-        // 【渲染锁】第一人称下玩家身体禁止写入 Shadow Map，消除幽灵阴影
+        // 第一人称下玩家身体仍需写入 Shadow Map，否则玩家影子消失
         shadowSkinnedShader.Use();
         shadowSkinnedShader.SetMat4("uLightSpaceMatrix", lightSpaceMatrix);
 
-        if (renderPlayerBody)
-        {
-            player.Draw(shadowSkinnedShader);
-        }
+        player.Draw(shadowSkinnedShader);
 
         // 1c. 渲染敌怪深度（使用骨骼动画阴影着色器）
         for (auto& enemy : enemies)

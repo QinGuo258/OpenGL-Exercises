@@ -103,7 +103,7 @@ Matrix computation:
  17. lightSpaceMatrix = ortho(-40,40,-40,40,1,100) * lookAt(lightPos, player, Up)
 
 Pass 1a — Shadow Map (FBO: depthMap, 4096×4096):
- 17-19. shadowShader → mapModel; shadowSkinnedShader → player (only when `renderPlayerBody`, i.e. not FirstPerson) + enemies
+ 17-19. shadowShader → mapModel; shadowSkinnedShader → player (always, even in FirstPerson — otherwise player shadow disappears) + enemies
 
 Pass 1b — Rain Occlusion Depth (FBO: rainDepthMap, 1024×1024, if rainIntensity > 0.01):
  20. shadowShader → mapModel only (no player)
@@ -161,19 +161,19 @@ A critical rendering invariant defined at the top of the `while` loop in `main.c
 bool renderPlayerBody = (thirdPersonCamera.CurrentMode != CameraMode::FirstPerson);
 ```
 
-When the player is in FirstPerson mode, their world-space body model **must never** be written to any framebuffer (Shadow Map, G-Buffer, or main scene). The body would otherwise produce a ring-shaped "ghost shadow" on the ground and SSAO contamination.
+When the player is in FirstPerson mode, their world-space body model is excluded from G-Buffer and main scene to prevent SSAO contamination and ghost body rendering. **However, the player is ALWAYS drawn to the Shadow Map** — even in FirstPerson — otherwise the player's shadow would disappear.
 
-**All three `player.Draw()` call sites** are guarded by `renderPlayerBody`:
+**Player draw call sites guarded by `renderPlayerBody`:**
 
 | Pass | Shader | Guard |
 |------|--------|-------|
-| Pass 1 (Shadow Map) | `shadowSkinnedShader` | `if (renderPlayerBody)` |
+| Pass 1 (Shadow Map) | `shadowSkinnedShader` | **Always** (no guard) |
 | Pass 1.5 (G-Buffer) | `gBufferSkinnedShader` | `if (renderPlayerBody)` |
 | Pass 2 (Main Scene) | `shader` (modelShader) | `if (renderPlayerBody)` |
 
 **Additionally**, FP arm (`armModel`) and FP held items (`hotbarModels[activeSlot]`) are **completely excluded from G-Buffer (Pass 1.5)** — they'd produce floating SSAO artifacts. They are only drawn in Pass 4 (after `glClear(GL_DEPTH_BUFFER_BIT)`) and in Pass 2's main scene pass.
 
-When adding a new rendering pass that draws the player, always check `renderPlayerBody`. When adding a new skinned model that should only appear in view space (like FP arm), ensure it is excluded from pre-passes.
+When adding a new rendering pass that draws the player, always check whether the pass needs `renderPlayerBody`. Shadow/depth passes should always include the player; color/SSAO passes should exclude in FirstPerson.
 
 ## Dynamic Moonlight & Night Shadows
 
@@ -233,6 +233,8 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 `Shader::Reload()` re-reads from source tree (prepends `SHADER_SRC_DIR` compile definition), recompiles, atomically swaps GL program. On failure, old program preserved.
 
 **All shaders are hot-reloadable** via the `allShaders` vector in `main.cpp`. Pressing F1 iterates the vector and calls `Reload()` on every shader, printing a count to stdout. The `allShaders` list must be updated when a new shader is added.
+
+**Startup auto-reload**: On launch, all shaders are automatically reloaded once to ensure the exe directory's shader copies are the latest versions from the source tree.
 
 ## HDR / Bloom / ACES Tone Mapping
 
