@@ -1459,18 +1459,23 @@ int main()
         float targetRain = isRaining ? 1.0f : 0.0f;
         rainIntensity += (targetRain - rainIntensity) * deltaTime * 0.2f;
 
-        // 下雨音效：首次下雨时初始化并循环播放，音量跟随 rainIntensity
+        // 下雨音效：首次下雨时随机选一首循环播放，音量跟随 rainIntensity
         if (rainIntensity > 0.01f) {
             if (!rainSoundLoaded) {
-                if (ma_sound_init_from_file(&audioEngine, "audio/Rain1.ogg.mp3",
+                const char* rainFiles[] = {
+                    "audio/Rain1.mp3", "audio/Rain2 .mp3",
+                    "audio/Rain3.mp3", "audio/Rain4.mp3"
+                };
+                int idx = rand() % 4;
+                if (ma_sound_init_from_file(&audioEngine, rainFiles[idx],
                      MA_SOUND_FLAG_ASYNC, NULL, NULL, &rainSound) == MA_SUCCESS) {
                     ma_sound_set_looping(&rainSound, MA_TRUE);
                     ma_sound_set_volume(&rainSound, rainIntensity);
                     ma_sound_start(&rainSound);
                     rainSoundLoaded = true;
-                    printf("[Audio] Rain sound started\n");
+                    printf("[Audio] Rain sound started: %s\n", rainFiles[idx]);
                 } else {
-                    fprintf(stderr, "[Audio] Failed to load audio/Rain1.ogg.mp3\n");
+                    fprintf(stderr, "[Audio] Failed to load %s\n", rainFiles[idx]);
                 }
             }
             if (rainSoundLoaded)
