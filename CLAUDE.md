@@ -49,6 +49,7 @@ CMake POST_BUILD copies `shaders/`, `models/`, `textures/`, `audio/`, and `fonts
 | F2 | Open time-of-day quick-select panel (4 buttons: 正午/黄昏/午夜/清晨 around screen center). Click a button to jump to that time. Mouse unlocked while open; mutually exclusive with T chat history |
 | F5 | Cycle camera mode (FirstPerson / ThirdPersonBack / ThirdPersonFront) |
 | F6 | Toggle collision debug wireframe |
+| F7 | Toggle screen space reflections (SSR) |
 | R | Toggle rain on/off (2s smooth transition) |
 | F3 | Toggle debug overlay (XYZ coordinates + FPS, top-left) |
 | T | Toggle chat history overlay (shows last 12 messages; locks mouse & movement while open) |
@@ -144,10 +145,11 @@ Pass 6 — 2D UI (orthographic projection):
  36. Font rendering: `FontRenderer::RenderText()` sets `uIsFont=true`, `uFontColor`, and per-character `uUvScale`/`uUvOffset` from atlas; fences back to `uIsFont=false` after. Font atlas bound to GL_TEXTURE0, uses GL_RED single-channel format.
 
 Post-Processing:
- 38. Bloom Pass 1: bright-pass extraction (threshold > 1.0) at 960×540 → pingpongColorTex[0]
- 39. God Rays Pass: if sun on-screen (godrayWeight > 0), radial blur reading pingpongColorTex[0] → pingpongColorTex[1], with distance mask filtering non-sun pixels; if active, Gaussian blur starts from [1] instead of [0]
- 40. Bloom Pass 2: dual-pass Gaussian blur ping-pong (3H + 3V iterations)
- 41. Bloom Pass 3: hdr_compose (scene+bloom → Reinhard → ACES → saturation boost → gamma)
+ 38. SSR Pass: if ssrEnabled, half-res (960×540) ray-march (40 steps + 4 refinement) from G-Buffer → ssrColorTex, sky fallback on miss, copy to ssrColorTexPrev for next frame
+ 39. Bloom Pass 1: bright-pass extraction (threshold > 1.0) at 960×540 → pingpongColorTex[0]
+ 40. God Rays Pass: if sun on-screen (godrayWeight > 0), radial blur reading pingpongColorTex[0] → pingpongColorTex[1], with distance mask filtering non-sun pixels; if active, Gaussian blur starts from [1] instead of [0]
+ 41. Bloom Pass 2: dual-pass Gaussian blur ping-pong (3H + 3V iterations)
+ 42. Bloom Pass 3: hdr_compose (scene+ssr+bloom → Reinhard → ACES → saturation boost → gamma)
 ```
 
 **⚠️ Player must be constructed after `gladLoadGLLoader()`** — constructor triggers OpenGL calls.
@@ -216,6 +218,7 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 | `blur.frag` | Dual-mode: **bright-pass extraction** (luminance > 1.0 → keep) + **dual-pass Gaussian blur** (5-tap, 3H+3V). |
 | `hdr_compose.frag` | Final tone-mapping: scene+bloom blend → Reinhard exposure → ACES filmic → **saturation boost (1.25x)** → gamma 2.4. |
 | `godrays.frag` (+ `fullscreen.vert`) | Screen-space crepuscular rays: 60-step radial blur from sun screen position toward edge, exponential decay (uDecay=0.92), **distance mask** (`smoothstep(0, 0.03, distToSun)`) filters non-sun bright pixels (clouds, emissives), output stored in `pingpongColorTex[1]` then fed into Gaussian blur. |
+| `ssr.frag` (+ `fullscreen.vert`) | Screen-space reflections at half-res (960×540): 40-step view-space ray-march + 4-step binary refinement with crossing detection. **Sky fallback** on miss (R.y>0): samples hdrColorTex at lastValidUV for real sky-with-clouds reflection. Fresnel (Schlick F0=0.04), edge fade, distance attenuation. Output to `ssrColorTex` → copied to `ssrColorTexPrev` → next frame sampled by `model.frag` on TU11 with per-material-type weights. |
 
 ### Shader Uniform Dependencies
 
@@ -251,6 +254,30 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 | ACES `a`–`e` | `hdr_compose.frag` | 2.51/0.05/2.43/0.59/0.16 | Film-like contrast curve |
 | Saturation | `hdr_compose.frag` | `1.25` | Color vibrance (1.0 = none) |
 | Gamma | `hdr_compose.frag` | `2.4` | Display gamma |
+
+### Screen Space Reflections (SSR)
+
+Post-processing pass inserted after HDR scene assembly, before Bloom. **Reads G-Buffer (view-space position + normal)** and `hdrColorTex` as reflection source.
+
+**Architecture**: SSR runs at **half resolution (960×540)** for performance. The current frame's SSR output is copied to `ssrColorTexPrev` and consumed in the **next frame** by `model.frag`, which blends it per-material-type (solving the chicken-and-egg problem — scene must be fully rendered before SSR can reflect it).
+
+**Two-stage pipeline**:
+1. `ssr.frag` → `ssrFBO`/`ssrColorTex` (960×540): ray-march + sky fallback
+2. `ssrColorTex` copied to `ssrColorTexPrev` for next frame
+3. `model.frag` samples `uSsrMap` (ssrColorTexPrev on TU11) per-material
+
+**Sky fallback**: when a reflected ray exits the screen without hitting geometry (`R.y > 0`), samples `hdrColorTex` at `lastValidUV` — giving water surfaces the actual rendered sky with clouds.
+
+| Parameter | File:Line | Current | Effect |
+|-----------|-----------|---------|--------|
+| `uMaxDistance` | `main.cpp` | `15.0` | Max ray-march distance in view-space meters |
+| `uRaySteps` | `main.cpp` | `40` | Linear march iterations |
+| `uRefinementSteps` | `main.cpp` | `4` | Binary search refinement iterations |
+| SSR resolution | `main.cpp` | `960×540` | Half-res for performance (~21M samples vs 83M) |
+| SSR per-material | `model.frag` | type 0: 0.12, 5: 0.40, 4: water path | Material reflectivity weights |
+| Fresnel F0 | `ssr.frag` | `0.04` | Schlick base reflectivity (dielectric) |
+
+**FBO routing**: SSR → `ssrFBO`/`ssrColorTex` (RGBA16F, 960×540) → copy to `ssrColorTexPrev` → next frame `model.frag` samples on TU11. Toggle with F7.
 
 ### God Rays (Crepuscular Rays)
 
@@ -288,7 +315,7 @@ Types 1, 2, 3, 4 detected automatically; type 5 is manual.
 - **Soft Shadows**: **Poisson disk sampling** (16 taps) with per-pixel random rotation via `rand(gl_FragCoord.xy)`. `filterRadius = 2.5` controls softness. Defined in `model.frag`.
 - **Light Space Matrix**: `ortho(-40,40,-40,40,1,100) * lookAt(lightPos, player.Position, Up)`. Light follows player (50m back along `activeLightDir`).
 - Dynamic bias: `max(0.005*(1-N·L), 0.0005)`.
-- Shadow texture unit: **15**. Rain depth texture unit: **14**. SSAO texture unit: **13**. Packed noise (water) texture unit: **12**.
+- Shadow texture unit: **15**. Rain depth texture unit: **14**. SSAO texture unit: **13**. Packed noise (water) texture unit: **12**. SSR scene source: **TU3** (during SSR pass). SSR reflection: **TU2** (during compose pass).
 
 ## SSAO (Screen-Space Ambient Occlusion)
 

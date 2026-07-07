@@ -32,6 +32,10 @@ uniform mat4 uLightSpaceMatrix; // 光源空间变换矩阵（法线偏移阴影
 // SSAO 遮蔽掩码（模糊后）
 uniform sampler2D uSsaoMap;
 uniform vec2 uScreenSize;
+uniform bool uDisableSsao; // 第一人称手臂/物品设为 true，跳过 SSAO 防止背景遮蔽污染
+
+// SSR 屏幕空间反射（上一帧结果，用于当前帧的材质反射采样）
+uniform sampler2D uSsrMap;
 
 // 点光源系统（从自发光网格顶点自动提取）
 #define MAX_POINT_LIGHTS 512
@@ -188,8 +192,11 @@ void main()
 
     // 环境光：使用 uAmbientColor（动态日夜环境色），乘以 SSAO 遮蔽因子
     // SSAO 仅衰减环境光，太阳直射光 (diffuse) 和点光源不受影响
-    vec2 screenTexCoords = gl_FragCoord.xy / uScreenSize;
-    float ssao = texture(uSsaoMap, screenTexCoords).r;
+    float ssao = 1.0;
+    if (!uDisableSsao) {
+        vec2 screenTexCoords = gl_FragCoord.xy / uScreenSize;
+        ssao = texture(uSsaoMap, screenTexCoords).r;
+    }
     vec3 ambient = uAmbientColor * albedoColor * ssao;
 
     // 漫反射（使用湿润后的 albedoColor）
@@ -214,27 +221,31 @@ void main()
     // 降雨时整体压暗
     finalColor *= mix(1.0, 0.4, uRainIntensity);
 
-    // --- 积水的天空环境反射 (Environment Reflection) ---
-    if (uRainIntensity > 0.0) {
+    // --- 积水屏幕空间反射 (接入 SSR + 天空回落) ---
+    // 水面 (materialType==4) 走自己的 SSR 路径，此处排除
+    if (uRainIntensity > 0.0 && uMaterialType != 4) {
         // 1. 计算视线反射向量
         vec3 reflectDir = reflect(-viewDir, baseNormal);
 
-        // 2. 直接采样 C++ 传入的、100% 动态昼夜同步的真实天空色！
-        // 这样在深夜，uHorizonColor 接近纯黑，积水反射也会自动变得深邃暗淡
-        vec3 fakeSkyColor = mix(uHorizonColor, uZenithColor, clamp(reflectDir.y, 0.0, 1.0));
-
-        // 3. 菲涅尔效应 (Fresnel Schlick 近似)
-        // 视线越平，反光越强；垂直看时反光极弱 (基础反射率水大约为 0.02)
+        // 2. 菲涅尔效应 (Fresnel Schlick 近似)
         float cosTheta = max(dot(viewDir, baseNormal), 0.0);
         float fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
 
-        // 4. 计算最终的反射强度，夜间自动压至极低，避免深夜积水刺眼
-        // 乘以 upFactor 确保只有朝上的面(地面)才反射天空
-        float nightDamp = mix(0.4, 0.02, uNightFade); // 白天 40%，夜晚暴跌至 2%
-        float reflectionStrength = puddleMask * uRainIntensity * fresnel * upFactor * nightDamp;
+        // 3. SSR 采样：雨水坑能反映建筑轮廓和云层
+        vec2 screenUV = gl_FragCoord.xy / uScreenSize;
+        vec3 ssrReflect = texture(uSsrMap, screenUV).rgb;
 
-        // 5. 将镜面天空反射叠加到最终颜色上
-        finalColor = mix(finalColor, fakeSkyColor, reflectionStrength);
+        // 4. 天空色回退 (SSR 全黑或第一帧时兜底)
+        vec3 fakeSkyColor = mix(uHorizonColor, uZenithColor, clamp(reflectDir.y, 0.0, 1.0));
+        float ssrLum = dot(ssrReflect, vec3(0.2126, 0.7152, 0.0722));
+        vec3 reflectionColor = mix(fakeSkyColor, ssrReflect, clamp(ssrLum * 2.0, 0.0, 1.0));
+
+        // 5. 反射强度，夜间压制，整体放大 4 倍确保可见
+        float nightDamp = mix(1.0, 0.05, uNightFade);
+        float reflectionStrength = puddleMask * uRainIntensity * fresnel * upFactor * nightDamp * 1.5;
+
+        // 6. 叠加上反射颜色（加法混合，不受地面底色稀释）
+        finalColor += reflectionColor * reflectionStrength;
     }
 
     // 点光源贡献：从火把/灯/岩浆等自发光方块发出温暖火光
@@ -264,6 +275,25 @@ void main()
         }
     }
     finalColor += pointLightColor;
+
+    // ========== 屏幕空间反射（SSR）— 按材质类型加权混合 ==========
+    // SSR 输出 = 反射颜色 × 边缘淡出 × 距离衰减，不含菲涅尔（由这里控制）
+    {
+        vec2 screenUV = gl_FragCoord.xy / uScreenSize;
+        vec3 ssrColor = texture(uSsrMap, screenUV).rgb;
+
+        // 视线掠射角（菲涅尔近似）：视线越平，反射越强
+        vec3 viewDir = normalize(uCameraPos - FragPos);
+        float NdotV = abs(dot(viewDir, baseNormal));
+        float grazingFresnel = pow(1.0 - NdotV, 5.0);
+
+        // 按材质类型分配反射率（F0 基础反射率 + 菲涅尔）
+        float ssrWeight = 0.0;
+        if (uMaterialType == 0)      ssrWeight = 0.0;   // 土/石/木 — 粗糙，无反射
+        else if (uMaterialType == 5) ssrWeight = mix(0.04, 1.0, grazingFresnel) * 0.5; // 手持道具 — Schlick 菲涅尔
+
+        finalColor += ssrColor * ssrWeight;
+    }
 
     // 自发光：uMaterialType==3 的物体无视阴影和暗光，直接输出材质本色
     if (uMaterialType == 3) {
@@ -299,32 +329,36 @@ void main()
         float fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
 
         // =================【核心修复一：极度幽暗的水底色】=================
-        // 白天是清澈的青蓝色，夜晚必须转为几乎无色、极度深邃的黑蓝色，防止夜间发出荧光
-        vec3 deepWater = mix(vec3(0.0, 0.12, 0.25), vec3(0.001, 0.003, 0.008), uNightFade);
-        vec3 shallowWater = mix(vec3(0.0, 0.35, 0.5), vec3(0.005, 0.01, 0.02), uNightFade);
+        vec3 deepWater = mix(vec3(0.0, 0.06, 0.18), vec3(0.001, 0.002, 0.004), uNightFade);
+        vec3 shallowWater = mix(vec3(0.0, 0.15, 0.36), vec3(0.003, 0.005, 0.01), uNightFade);
         vec3 waterBase = mix(shallowWater, deepWater, cosTheta);
 
-        // =================【核心修复二：真实天空反射】=================
-        // 直接反射 C++ 传进来的、正在发生昼夜/黄昏渐变的天空色！
-        // 视线越平，越反射地平线色(uHorizonColor)；越往上看，越反射天顶色(uZenithColor)
+        // =================【核心修复二：SSR 屏幕空间反射】=================
+        // SSR 输出已包含几何体命中 + 天空回落，不含菲涅尔
+        // 这里用水面自己的菲涅尔控制反射强度
+        vec2 screenUV = gl_FragCoord.xy / uScreenSize;
+        vec3 ssrReflect = texture(uSsrMap, screenUV).rgb;
+
+        // 天空色基底（SSR 的第一帧回退 + 当 SSR 偏暗时的平滑过渡）
         vec3 viewReflect = reflect(-viewDirSafe, waterNorm);
         vec3 skyColor = mix(uHorizonColor, uZenithColor, clamp(viewReflect.y, 0.0, 1.0));
+        float ssrLum = dot(ssrReflect, vec3(0.2126, 0.7152, 0.0722));
+        vec3 reflectionColor = mix(skyColor, ssrReflect, clamp(ssrLum * 2.0, 0.0, 1.0));
 
-        // =================【核心修复三：柔和的月光高光 (Sun/Moon Glint)】=================
-        // 太阳高光极锐利(256.0)，但月光高光必须极柔和(64.0)，让夜间反光是一片温润的水光
+        // =================【核心修复三：月光 / 太阳高光】=================
         float shininessFactor = mix(256.0, 64.0, uNightFade);
         vec3 reflectDir = reflect(normalize(uLightDir), waterNorm);
         float specFactor = pow(max(dot(viewDirSafe, reflectDir), 0.0), shininessFactor);
-        float glintIntensity = mix(8.0, 0.4, uNightFade); // 压低夜间月光反光强度
+        float glintIntensity = mix(8.0, 0.4, uNightFade);
         vec3 waterGlint = uLightColor * specFactor * glintIntensity;
 
-        // 混合最终颜色
-        finalColor = waterBase + skyColor * fresnel + waterGlint;
+        // 混合 — 反射主导（×1.0 补偿菲涅尔低值），水底色仅在垂直看时可见
+        finalColor = waterBase * 0.5 + reflectionColor * fresnel * 1.0 + waterGlint;
 
-        // =================【核心修复四：释放物理通透度】=================
-        // 夜晚水面稍微加厚保持深邃，但依旧通透
-        float targetAlpha = mix(0.12, 0.75, fresnel);
-        alpha = mix(targetAlpha, 0.95, uNightFade * 0.5); // 夜晚水面加厚至约 0.5，通透但深邃
+        // =================【核心修复四：水体不透明度】=================
+        // 垂直看时 0.45 不透明（不再看到水底），掠射角接近 1.0 全遮挡
+        float targetAlpha = mix(0.45, 0.90, fresnel);
+        alpha = mix(targetAlpha, 0.95, uNightFade * 0.3);
     }
 
     OutColor = vec4(finalColor, alpha);

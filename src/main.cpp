@@ -85,6 +85,10 @@ int activeSlot = 0;  // 快捷栏当前选中槽位 (0-8)
 bool showDebugScreen = false;
 bool f3KeyPressed = false;
 
+// F7 屏幕空间反射开关
+bool ssrEnabled = true;
+bool f7KeyPressed = false;
+
 // 中文 TrueType 字体渲染器
 FontRenderer fontRenderer;
 
@@ -774,6 +778,7 @@ int main()
     Shader blurShader("shaders/fullscreen.vert", "shaders/blur.frag");
     Shader hdrComposeShader("shaders/fullscreen.vert", "shaders/hdr_compose.frag");
     Shader godraysShader("shaders/fullscreen.vert", "shaders/godrays.frag");
+    Shader ssrShader("shaders/fullscreen.vert", "shaders/ssr.frag");
 
     // 全部着色器指针列表（F1 一键热重载）
     std::vector<Shader*> allShaders = {
@@ -781,7 +786,7 @@ int main()
         &gBufferShader, &gBufferSkinnedShader,
         &ssaoShader, &ssaoBlurShader,
         &debugShader, &skyShader, &rainShader, &uiShader,
-        &blurShader, &hdrComposeShader, &godraysShader
+        &blurShader, &hdrComposeShader, &godraysShader, &ssrShader
     };
 
     float skyVertices[] = {
@@ -1130,6 +1135,38 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBufferBlur, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // ======================================================================
+    // SSR 屏幕空间反射 FBO（半分辨率 960×540，RGBA16F，性能优化）
+    // ======================================================================
+    const unsigned int SSR_WIDTH = 960, SSR_HEIGHT = 540;
+    unsigned int ssrFBO, ssrColorTex;
+    glGenFramebuffers(1, &ssrFBO);
+    glGenTextures(1, &ssrColorTex);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+    glBindTexture(GL_TEXTURE_2D, ssrColorTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SSR_WIDTH, SSR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrColorTex, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        fprintf(gLogFile ? gLogFile : stderr,
+                "ERROR: SSR FBO is not complete!\n");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 上一帧 SSR 纹理（供 model.frag 按材质采样，避免鸡生蛋问题）
+    unsigned int ssrColorTexPrev;
+    glGenTextures(1, &ssrColorTexPrev);
+    glBindTexture(GL_TEXTURE_2D, ssrColorTexPrev);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SSR_WIDTH, SSR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // 上传采样核心到 SSAO 着色器 (一次性，不会变)
     ssaoShader.Use();
@@ -1836,6 +1873,11 @@ int main()
         glActiveTexture(GL_TEXTURE13);
         glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
 
+        // SSR 屏幕空间反射（上一帧结果，半分辨率 → 模型着色器按材质类型混合）
+        shader.SetInt("uSsrMap", 11);
+        glActiveTexture(GL_TEXTURE11);
+        glBindTexture(GL_TEXTURE_2D, ssrColorTexPrev);
+
         // 水面噪点打包贴图：绑定到纹理单元 12，用于有限差分法线计算
         shader.SetInt("uPackedNoiseMap", 12);
         glActiveTexture(GL_TEXTURE12);
@@ -1939,6 +1981,17 @@ int main()
                 // 5. 绘制物品
                 hotbarModels[activeSlot]->Draw(shader.ID());
             }
+        }
+
+        // F7 屏幕空间反射开关（边缘触发）
+        {
+            static bool f7WasPressed = false;
+            bool f7Pressed = glfwGetKey(window, GLFW_KEY_F7) == GLFW_PRESS;
+            if (f7Pressed && !f7WasPressed) {
+                ssrEnabled = !ssrEnabled;
+                printf("[F7] SSR: %s\n", ssrEnabled ? "ON" : "OFF");
+            }
+            f7WasPressed = f7Pressed;
         }
 
         // Debug Draw：碰撞三角形线框（绿色，F6 切换）
@@ -2206,7 +2259,45 @@ int main()
         }
 
         // ======================================================================
-        // 程序化雨滴绘制（VBO-less GL_LINES）
+        // Pass SSR: 屏幕空间反射（半分辨率 960×540，读取 G-Buffer + HDR 场景）
+        // ======================================================================
+        if (ssrEnabled) {
+            glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+            glViewport(0, 0, SSR_WIDTH, SSR_HEIGHT);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            ssrShader.Use();
+            ssrShader.SetMat4("uProjection", thirdPersonCamera.GetProjectionMatrix());
+            ssrShader.SetVec2("uScreenSize", glm::vec2((float)SSR_WIDTH, (float)SSR_HEIGHT));
+            ssrShader.SetVec2("uFullScreenSize", glm::vec2(1920.0f, 1080.0f));
+            ssrShader.SetFloat("uMaxDistance", 15.0f);
+            ssrShader.SetInt("uRaySteps", 40);
+            ssrShader.SetInt("uRefinementSteps", 4);
+
+            // G-Buffer 纹理 — 全分辨率（从半分辨率 SSR UV 采样全分辨率 G-Buffer）
+            ssrShader.SetInt("gPosition", 0);
+            ssrShader.SetInt("gNormal", 1);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, gPosition);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, gNormal);
+
+            // HDR 场景颜色 — 反射源（全分辨率）
+            ssrShader.SetInt("uSceneTex", 3);
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, hdrColorTex);
+
+            glBindVertexArray(fullscreenVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            // 复制当前帧 SSR 到 prev 纹理（供下一帧 model.frag 使用）
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, ssrFBO);
+            glBindTexture(GL_TEXTURE_2D, ssrColorTexPrev);
+            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, SSR_WIDTH, SSR_HEIGHT);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
         // ======================================================================
         // Bloom Pass 1 — 亮部提取（半分辨率，提升性能 + 松软光晕感）
         // ======================================================================

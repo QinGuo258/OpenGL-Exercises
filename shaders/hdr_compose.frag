@@ -16,7 +16,7 @@ void main() {
     vec3 sceneColor = texture(uSceneTex, TexCoords).rgb;
     vec3 bloomColor = texture(uBloomTex, TexCoords).rgb;
 
-    // 1. 线性叠加原图与金黄色光晕
+    // 1. 线性叠加场景 + 辉光 (SSR 反射由 model.frag 按材质类型独立混合)
     vec3 result = sceneColor + bloomColor * uBloomIntensity;
 
     // 2. 曝光度映射
