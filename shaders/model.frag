@@ -240,9 +240,11 @@ void main()
         float ssrLum = dot(ssrReflect, vec3(0.2126, 0.7152, 0.0722));
         vec3 reflectionColor = mix(fakeSkyColor, ssrReflect, clamp(ssrLum * 2.0, 0.0, 1.0));
 
-        // 5. 反射强度，夜间压制，整体放大 4 倍确保可见
+        // 5. 反射强度，夜间压制
+        // normal.y 连续衰减：平坦地面 ≈1.0 全反光，陡坡/墙壁逐渐减弱
         float nightDamp = mix(1.0, 0.05, uNightFade);
-        float reflectionStrength = puddleMask * uRainIntensity * fresnel * upFactor * nightDamp * 1.5;
+        float slopeDamp = clamp(normal.y * normal.y * 3.0, 0.0, 1.0); // 法线越陡反光越弱
+        float reflectionStrength = puddleMask * uRainIntensity * fresnel * upFactor * nightDamp * slopeDamp * 1.0;
 
         // 6. 叠加上反射颜色（加法混合，不受地面底色稀释）
         finalColor += reflectionColor * reflectionStrength;

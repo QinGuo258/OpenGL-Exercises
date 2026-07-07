@@ -2319,7 +2319,7 @@ int main()
 
             godraysShader.Use();
             godraysShader.SetVec2("uLightScreenPos", lightScreenPos);
-            godraysShader.SetFloat("uDensity", 0.95f); // 拉扯距离
+            godraysShader.SetFloat("uDensity", 1.0f); // 拉扯距离
             godraysShader.SetFloat("uDecay", 0.92f);   // 衰减速度
             godraysShader.SetFloat("uWeight", godrayWeight);
 

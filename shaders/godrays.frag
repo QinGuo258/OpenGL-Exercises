@@ -24,10 +24,12 @@ void main() {
     for(int i = 0; i < NUM_SAMPLES; i++) {
         textCoo -= deltaTextCoord; // 向着中心收缩
         vec3 sampleColor = texture(uInputTex, textCoo).rgb;
+
         // 太阳距离遮罩：远离太阳的采样点衰减到零，防止云和发光方块产生虚假上帝光
         float distToSun = length(textCoo - uLightScreenPos);
         float sunMask = 1.0 - smoothstep(0.0, 0.50, distToSun);
         sampleColor *= sunMask;
+
         // 采样颜色乘以衰减和权重
         sampleColor *= illuminationDecay * uWeight;
         color += sampleColor;
