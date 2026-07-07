@@ -29,6 +29,8 @@ FILE* gLogFile = nullptr;
 
 // 全局音频引擎（miniaudio）
 ma_engine audioEngine;
+ma_sound rainSound;            // 下雨环境音效（持续循环）
+bool  rainSoundLoaded = false; // 是否已初始化
 
 // 死亡烟雾粒子系统
 struct DeathParticle {
@@ -1456,6 +1458,29 @@ int main()
         // 降雨强度平滑过渡（约 2 秒内完成）
         float targetRain = isRaining ? 1.0f : 0.0f;
         rainIntensity += (targetRain - rainIntensity) * deltaTime * 0.2f;
+
+        // 下雨音效：首次下雨时初始化并循环播放，音量跟随 rainIntensity
+        if (rainIntensity > 0.01f) {
+            if (!rainSoundLoaded) {
+                if (ma_sound_init_from_file(&audioEngine, "audio/Rain1.ogg.mp3",
+                     MA_SOUND_FLAG_ASYNC, NULL, NULL, &rainSound) == MA_SUCCESS) {
+                    ma_sound_set_looping(&rainSound, MA_TRUE);
+                    ma_sound_set_volume(&rainSound, rainIntensity);
+                    ma_sound_start(&rainSound);
+                    rainSoundLoaded = true;
+                    printf("[Audio] Rain sound started\n");
+                } else {
+                    fprintf(stderr, "[Audio] Failed to load audio/Rain1.ogg.mp3\n");
+                }
+            }
+            if (rainSoundLoaded)
+                ma_sound_set_volume(&rainSound, rainIntensity);
+        } else if (rainSoundLoaded) {
+            ma_sound_stop(&rainSound);
+            ma_sound_uninit(&rainSound);
+            rainSoundLoaded = false;
+            printf("[Audio] Rain sound stopped\n");
+        }
 
         // 风力相位累积：每帧按当前风速递增，避免 uTime * windSpeed 在降雨过渡时
         // 因 d(windSpeed)/dt 项乘以巨大的 uTime 产生高频抖动
@@ -2937,6 +2962,7 @@ int main()
     }
 
     if (gLogFile) fclose(gLogFile);
+    if (rainSoundLoaded) { ma_sound_stop(&rainSound); ma_sound_uninit(&rainSound); }
     ma_engine_uninit(&audioEngine);
     glfwTerminate();
     return 0;
