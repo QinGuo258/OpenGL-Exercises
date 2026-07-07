@@ -717,7 +717,7 @@ private:
 static TuningConfig gTuning;
 
 static void ReloadTuning() {
-    if (gTuning.Load("shaders/tuning.json")) {
+    if (gTuning.Load(SHADER_SRC_DIR "tuning.json")) {
         printf("[Tuning] Reloaded tuning.json (%zu params)\n", gTuning.vals.size());
     } else {
         fprintf(stderr, "[Tuning] Failed to load tuning.json\n");
@@ -1779,11 +1779,15 @@ int main()
         }
 
         // 1b. 渲染动态角色深度（使用骨骼动画阴影着色器）
-        // 第一人称下玩家身体仍需写入 Shadow Map，否则玩家影子消失
+        // 玩家始终写入 Shadow Map（包括头部）。第一人称时临时
+        // 关闭头部隐藏，否则头部骨骼缩放为 0 → 头部不投射阴影。
         shadowSkinnedShader.Use();
         shadowSkinnedShader.SetMat4("uLightSpaceMatrix", lightSpaceMatrix);
 
+        bool wasHeadHidden = (thirdPersonCamera.CurrentMode == CameraMode::FirstPerson);
+        if (wasHeadHidden) player.GetAnimator().SetHideHead(false);
         player.Draw(shadowSkinnedShader);
+        if (wasHeadHidden) player.GetAnimator().SetHideHead(true);
 
         // 1c. 渲染敌怪深度（使用骨骼动画阴影着色器）
         for (auto& enemy : enemies)
