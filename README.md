@@ -217,7 +217,7 @@ OpenGL/
 ├── fonts/                      # TrueType 字体文件
 ├── external/                   # 第三方依赖库（需自行获取，见编译步骤）
 ├── CLAUDE.md                   # AI 辅助开发文档
-├── PROJECT_SUMMARY.md          # 技术详细总结
+├── tuning.md                   # 渲染效果调参指南
 ├── algorithm.md                # 算法文档
 ├── shader.md                   # 着色器文档
 ├── src.md                      # 源代码文档
@@ -302,7 +302,7 @@ CMake POST_BUILD 会自动复制 `shaders/`、`models/`、`textures/`、`audio/`
 
 ## 📝 技术文档
 
-- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** — 完整技术总结（渲染管线、动画系统、物理系统、AI、UI 架构）
+- **[tuning.md](tuning.md)** — 渲染效果调参指南（天空、水面、SSR、雨水、上帝光等所有可调参数速查）
 - **[CLAUDE.md](CLAUDE.md)** — AI 辅助开发文档（含渲染循环顺序、着色器清单、材质类型系统）
 - **[algorithm.md](algorithm.md)** — 核心算法推导（阴影、SSAO、水面、体积云）
 - **[shader.md](shader.md)** — 着色器详细说明与 Uniform 依赖

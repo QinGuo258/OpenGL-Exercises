@@ -17,7 +17,10 @@
       "Bash(timeout 15 ./OpenGL.exe)",
       "Bash(timeout 5 ./OpenGL.exe)",
       "Bash(timeout 20 ./OpenGL.exe)",
-      "Bash(cmake --build \"D:\\\\Microsoft Visual Studio Projects\\\\Cpp\\\\OpenGL\\\\out\\\\build\\\\x64-debug\")"
+      "Bash(cmake --build \"D:\\\\Microsoft Visual Studio Projects\\\\Cpp\\\\OpenGL\\\\out\\\\build\\\\x64-debug\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }

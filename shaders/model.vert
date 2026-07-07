@@ -18,6 +18,7 @@ uniform mat4 uLightSpaceMatrix;
 uniform mat4 finalBonesMatrices[MAX_BONES];
 uniform float uTime;
 uniform float uRainIntensity;
+uniform float uWindPhase;
 uniform int uMaterialType;
 
 void main()
@@ -37,14 +38,13 @@ void main()
 
     // 风力摇摆：uMaterialType 1=草丛(底部锚定), 2=树叶(整体抖动)
     if (uMaterialType == 1 || uMaterialType == 2) {
-        float windSpeed = 2.0 + uRainIntensity * 4.0;
         float windStrength = 0.05 + uRainIntensity * 0.05;
 
         // 草丛底部锚定不动 (aTexCoords.y≈0 为根部)，树叶整体 0.8 权重抖动
         float windWeight = (uMaterialType == 1) ? aTexCoords.y : 0.8;
 
-        float offsetX = sin(worldPos.x * 2.0 + uTime * windSpeed) * windStrength * windWeight;
-        float offsetZ = cos(worldPos.z * 2.0 + uTime * windSpeed) * windStrength * windWeight;
+        float offsetX = sin(worldPos.x * 2.0 + uWindPhase) * windStrength * windWeight;
+        float offsetZ = cos(worldPos.z * 2.0 + uWindPhase) * windStrength * windWeight;
 
         worldPos.x += offsetX;
         worldPos.z += offsetZ;
