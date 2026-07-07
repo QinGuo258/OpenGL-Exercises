@@ -1,2 +1,8 @@
 # 将第三方依赖库标记为 vendored，GitHub 语言统计时排除
 external/** linguist-vendored
+
+# 第三方单头 C 库（位于 src/，内容为纯 C，会污染 GitHub 语言统计）
+src/stb_truetype.h linguist-vendored
+src/miniaudio.h    linguist-vendored
+src/font_baker.c   linguist-vendored
+src/font_baker.h   linguist-vendored
