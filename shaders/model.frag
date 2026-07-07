@@ -253,27 +253,25 @@ void main()
     // 点光源贡献：从火把/灯/岩浆等自发光方块发出温暖火光
     vec3 pointLightColor = vec3(0.0);
     if (uMaterialType != 3) {
-        vec3 fireColor = vec3(0.7, 0.45, 0.2);
+        vec3 fireColor = vec3(1.4, 0.9, 0.4);  // 比之前亮一倍（原 0.7,0.45,0.2）
         for (int i = 0; i < uNumPointLights; i++) {
             vec3 lightDir = uPointLights[i] - FragPos;
             float distance = length(lightDir);
 
-            // 性能优化：距离超过 12 米的光源不产生影响
-            float maxDist = 12.0;
+            // 有效光照半径（原 12m → 20m）
+            float maxDist = 20.0;
             if (distance > maxDist) continue;
 
             lightDir = normalize(lightDir);
             float diff = max(dot(baseNormal, lightDir), 0.0);
 
-            // 物理距离衰减
-            float attenuation = 1.0 / (1.0 + 0.14 * distance + 0.07 * (distance * distance));
+            // 物理距离衰减（系数减小 = 光线衰退更慢）
+            float attenuation = 1.0 / (1.0 + 0.07 * distance + 0.02 * (distance * distance));
 
-            // =================【核心修复：边缘平滑消隐】=================
-            // 当距离在 8.0 到 12.0 之间时，让光线平滑、线性地淡出到 0
-            // 这样在 12.0 米触发 continue 之前，光线就已经完全融入黑暗，消灭硬边！
-            float fade = clamp((maxDist - distance) / 4.0, 0.0, 1.0);
+            // 边缘平滑消隐（8m → 20m 渐变）
+            float fade = clamp((maxDist - distance) / 6.0, 0.0, 1.0);
 
-            pointLightColor += diff * fireColor * texColor.rgb * attenuation * fade * 0.8;
+            pointLightColor += diff * fireColor * texColor.rgb * attenuation * fade * 1.2;
         }
     }
     finalColor += pointLightColor;
