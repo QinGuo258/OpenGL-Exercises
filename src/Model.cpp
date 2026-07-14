@@ -176,7 +176,32 @@ Mesh Model::ProcessMesh(aiMesh* mesh, const aiScene* scene)
                 nameStr.find("plant") != std::string::npos ||
                 nameStr.find("fern") != std::string::npos ||
                 nameStr.find("tall") != std::string::npos ||
-                nameStr.find("vine") != std::string::npos
+                nameStr.find("vine") != std::string::npos ||
+                // === Minecraft 花卉/植物精确匹配 ===
+                nameStr.find("tulip") != std::string::npos ||       // 郁金香 (pink/red/white_tulip)
+                nameStr.find("daisy") != std::string::npos ||       // 滨菊 (oxeye_daisy)
+                nameStr.find("orchid") != std::string::npos ||      // 兰花 (blue_orchid)
+                nameStr.find("allium") != std::string::npos ||      // 绒球葱
+                nameStr.find("bluet") != std::string::npos ||       // 蓝花美耳草 (azure_bluet)
+                nameStr.find("dandelion") != std::string::npos ||   // 蒲公英
+                nameStr.find("poppy") != std::string::npos ||       // 虞美人
+                nameStr.find("lilac") != std::string::npos ||       // 丁香
+                nameStr.find("rose") != std::string::npos ||        // 玫瑰丛
+                nameStr.find("lily") != std::string::npos ||        // 铃兰/睡莲
+                nameStr.find("mushroom") != std::string::npos ||    // 蘑菇 (brown/red_mushroom)
+                nameStr.find("sapling") != std::string::npos ||     // 树苗 (oak_sapling)
+                nameStr.find("roots") != std::string::npos ||       // 菌索/垂根 (hanging_roots, crimson_roots_pot)
+                nameStr.find("bush") != std::string::npos ||        // 灌木丛 (rose_bush, sweet_berry_bush, dead_bush)
+                nameStr.find("cane") != std::string::npos ||        // 甘蔗 (sugar_cane)
+                nameStr.find("dripleaf") != std::string::npos ||    // 大型/小型垂滴叶
+                nameStr.find("blossom") != std::string::npos ||     // 孢子花 (spore_blossom)
+                nameStr.find("lichen") != std::string::npos ||      // 发光地衣 (glow_lichen)
+                nameStr.find("berry") != std::string::npos ||       // 甜浆果丛
+                nameStr.find("coral") != std::string::npos ||       // 珊瑚扇 (brain/bubble/tube_coral_fan)
+                nameStr.find("pickle") != std::string::npos ||      // 海泡菜 (sea_pickle)
+                nameStr.find("beetroots") != std::string::npos ||   // 甜菜根
+                nameStr.find("carrots") != std::string::npos ||     // 胡萝卜
+                nameStr.find("potatoes") != std::string::npos       // 马铃薯
             ) {
                 matType = 1; // 杂草/花朵/农作物 (非实体，无物理碰撞，且随风飘动)
             }

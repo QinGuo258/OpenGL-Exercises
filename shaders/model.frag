@@ -159,16 +159,16 @@ void main()
 
     // --- 湿润系数与水坑效果 ---
     // 1. 利用世界坐标 XZ 生成低频噪声水坑
-    float n = noise2D(FragPos.xz * 0.5); // 缩放因子控制水坑大小
+    float n = noise2D(FragPos.xz * 0.4); // 缩放因子控制水坑大小
 
     // 2. 只有向上的面才能积水 (法线 Y 大于 0.8)
     float upFactor = clamp((normal.y - 0.8) * 5.0, 0.0, 1.0);
 
     // 3. 随着雨变大，水坑面积扩张 (smoothstep 阈值动态降低)
-    float puddleMask = smoothstep(0.8 - uRainIntensity * 0.3, 0.9 - uRainIntensity * 0.3, n);
+    float puddleMask = smoothstep(0.8 - uRainIntensity * 0.35, 0.9 - uRainIntensity * 0.35, n);
 
     // 4. 综合湿润度：整体潮湿底色 + 明显的水坑
-    float wetness = clamp(uRainIntensity * 0.3 + puddleMask * uRainIntensity, 0.0, 1.0) * upFactor;
+    float wetness = clamp(uRainIntensity * 0.45 + puddleMask * uRainIntensity, 0.0, 1.0) * upFactor;
 
     // 5. 材质物理变化
     // 漫反射变暗 (泥土吸水颜色变深)
@@ -192,12 +192,22 @@ void main()
 
     // 环境光：使用 uAmbientColor（动态日夜环境色），乘以 SSAO 遮蔽因子
     // SSAO 仅衰减环境光，太阳直射光 (diffuse) 和点光源不受影响
+    // pow(ssao, 3.0) 提升对比度——墙角处的微小遮挡差异在视觉上会更加明显
     float ssao = 1.0;
     if (!uDisableSsao) {
         vec2 screenTexCoords = gl_FragCoord.xy / uScreenSize;
         ssao = texture(uSsaoMap, screenTexCoords).r;
     }
-    vec3 ambient = uAmbientColor * albedoColor * ssao;
+    float ssaoContrast = ssao * ssao * ssao; // 立方增强：墙角 0.85→0.61，开阔面 1.0→1.0
+
+    // 植被材质降低 SSAO 强度：草/作物 (type 1) 和树叶 (type 2) 的薄片几何
+    // 在缝隙中本来就不该产生和实体墙面一样深的遮蔽
+    float materialSsaoStrength = 1.0;
+    if (uMaterialType == 1) materialSsaoStrength = 0.3;      // 草：30% SSAO
+    else if (uMaterialType == 2) materialSsaoStrength = 0.5; // 树叶：50% SSAO
+    ssaoContrast = mix(1.0, ssaoContrast, materialSsaoStrength);
+
+    vec3 ambient = uAmbientColor * albedoColor * ssaoContrast;
 
     // 漫反射（使用湿润后的 albedoColor）
     float diff = max(dot(baseNormal, lightDir), 0.0);
@@ -219,7 +229,7 @@ void main()
     vec3 finalColor = ambient + (1.0 - shadow) * (diffuse + specular);
 
     // 降雨时整体压暗
-    finalColor *= mix(1.0, 0.4, uRainIntensity);
+    finalColor *= mix(1.0, 0.3, uRainIntensity);
 
     // --- 积水屏幕空间反射 (接入 SSR + 天空回落) ---
     // 水面 (materialType==4) 走自己的 SSR 路径，此处排除
@@ -229,7 +239,7 @@ void main()
 
         // 2. 菲涅尔效应 (Fresnel Schlick 近似)
         float cosTheta = max(dot(viewDir, baseNormal), 0.0);
-        float fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
+        float fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 8.0);
 
         // 3. SSR 采样：雨水坑能反映建筑轮廓和云层
         vec2 screenUV = gl_FragCoord.xy / uScreenSize;
@@ -244,7 +254,7 @@ void main()
         // normal.y 连续衰减：平坦地面 ≈1.0 全反光，陡坡/墙壁逐渐减弱
         float nightDamp = mix(1.0, 0.05, uNightFade);
         float slopeDamp = clamp(normal.y * normal.y * 3.0, 0.0, 1.0); // 法线越陡反光越弱
-        float reflectionStrength = puddleMask * uRainIntensity * fresnel * upFactor * nightDamp * slopeDamp * 1.0;
+        float reflectionStrength = puddleMask * uRainIntensity * fresnel * upFactor * nightDamp * slopeDamp * 0.7;
 
         // 6. 叠加上反射颜色（加法混合，不受地面底色稀释）
         finalColor += reflectionColor * reflectionStrength;
@@ -349,12 +359,11 @@ void main()
         float glintIntensity = mix(8.0, 0.4, uNightFade);
         vec3 waterGlint = uLightColor * specFactor * glintIntensity;
 
-        // 混合 — 反射主导（×1.0 补偿菲涅尔低值），水底色仅在垂直看时可见
+        // 混合 — 反射主导，水底色仅在垂直看时可见
         finalColor = waterBase * 0.5 + reflectionColor * fresnel * 1.0 + waterGlint;
 
-        // =================【核心修复四：水体不透明度】=================
-        // 垂直看时 0.45 不透明（不再看到水底），掠射角接近 1.0 全遮挡
-        float targetAlpha = mix(0.45, 0.90, fresnel);
+        // 垂直看时可见水底，掠射角接近全遮挡
+        float targetAlpha = mix(0.45, 1.0, fresnel);
         alpha = mix(targetAlpha, 0.95, uNightFade * 0.3);
     }
 

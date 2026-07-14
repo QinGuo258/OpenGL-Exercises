@@ -89,6 +89,8 @@ int activeSlot = 0;  // 快捷栏当前选中槽位 (0-8)
 
 bool showDebugScreen = false;
 bool f3KeyPressed = false;
+bool ssaoDebugView = false;     // F4 切换 SSAO 遮蔽贴图可视化
+bool f4KeyPressed = false;
 
 // 中文 TrueType 字体渲染器
 FontRenderer fontRenderer;
@@ -519,6 +521,17 @@ void processInput(GLFWwindow* window, Player& player, std::vector<Enemy>& enemie
         f3KeyPressed = false;
     }
 
+    // F4 键切换 SSAO 遮蔽贴图可视化（边缘触发）
+    if (glfwGetKey(window, GLFW_KEY_F4) == GLFW_PRESS) {
+        if (!f4KeyPressed) {
+            ssaoDebugView = !ssaoDebugView;
+            f4KeyPressed = true;
+            printf("[F4] SSAO debug view: %s\n", ssaoDebugView ? "ON" : "OFF");
+        }
+    } else {
+        f4KeyPressed = false;
+    }
+
     thirdPersonCamera.SetSneakOffset(player.GetVisualYOffset());
     thirdPersonCamera.TargetPosition = player.Position;
     thirdPersonCamera.UpdateCameraPosition();
@@ -748,6 +761,8 @@ int main()
         return -1;
     }
     glfwMakeContextCurrent(window);
+    // 开启垂直同步 (V-Sync)，强制帧率与显示器刷新率同步，释放显卡资源给录屏软件
+    glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, cursor_position_callback);
     glfwSetScrollCallback(window, scroll_callback);
@@ -851,6 +866,9 @@ int main()
     // SSAO 模糊着色器（4×4 均值模糊，消除高频噪点）
     Shader ssaoBlurShader("shaders/fullscreen.vert", "shaders/ssao_blur.frag");
 
+    // SSAO 调试可视化着色器（R→灰度，F4 键切换）
+    Shader ssaoDebugShader("shaders/fullscreen.vert", "shaders/ssao_debug.frag");
+
     // 碰撞三角形 Debug Draw：提取线段顶点 → GPU VAO
     Shader debugShader("shaders/debug.vert", "shaders/debug.frag");
 
@@ -873,7 +891,7 @@ int main()
     std::vector<Shader*> allShaders = {
         &shader, &shadowShader, &shadowSkinnedShader,
         &gBufferShader, &gBufferSkinnedShader,
-        &ssaoShader, &ssaoBlurShader,
+        &ssaoShader, &ssaoBlurShader, &ssaoDebugShader,
         &debugShader, &skyShader, &rainShader, &uiShader,
         &blurShader, &hdrComposeShader, &godraysShader, &ssrShader
     };
@@ -1202,7 +1220,7 @@ int main()
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
     glGenTextures(1, &ssaoColorBuffer);
     glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1920, 1080, 0, GL_RED, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, 1920, 1080, 0, GL_RED, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1219,10 +1237,15 @@ int main()
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
     glGenTextures(1, &ssaoColorBufferBlur);
     glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1920, 1080, 0, GL_RED, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, 1920, 1080, 0, GL_RED, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBufferBlur, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        fprintf(gLogFile ? gLogFile : stderr, "ERROR: SSAO Blur FBO not complete!\n");
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // ======================================================================
@@ -1257,10 +1280,12 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // 上传采样核心到 SSAO 着色器 (一次性，不会变)
-    ssaoShader.Use();
-    for (unsigned int i = 0; i < 64; ++i)
-        ssaoShader.SetVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+    // SSAO 采样核心上传（每次热重载后需要重新上传，因为 Reload 会创建新的 GL 程序对象）
+    auto uploadSsaokernel = [&]() {
+        ssaoShader.Use();
+        for (unsigned int i = 0; i < 64; ++i)
+            ssaoShader.SetVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+    };
 
     // ======================================================================
     // Bloom 高斯模糊双通道 FBO（半分辨率：960×540，软光晕性能优化）
@@ -1326,6 +1351,9 @@ int main()
         }
         printf("[Shader] Startup hot-reload: %d/%zu shaders\n", reloaded, allShaders.size());
     }
+
+    // 热重载创建了新的 GL 程序对象，必须重新上传 SSAO 采样核心
+    uploadSsaokernel();
 
     // 启动时加载运行时配置
     ReloadTuning();
@@ -1878,6 +1906,7 @@ int main()
         for (const auto& mesh : mapModel.GetMeshes())
         {
             if (mesh.materialType == 4) continue;
+            gBufferShader.SetInt("uMaterialType", mesh.materialType);
             mesh.Draw(gBufferShader.ID());
         }
 
@@ -2182,6 +2211,7 @@ int main()
                 }
                 printf("[Shader] Hot-reloaded %d/%zu shaders\n", reloaded, allShaders.size());
                 ReloadTuning();  // 同步重载运行时参数
+                uploadSsaokernel(); // 热重载创建了新 GL 程序，SSAO 采样核心需重新上传
             }
             f1WasPressed = f1Pressed;
         }
@@ -2523,6 +2553,21 @@ int main()
         hdrComposeShader.SetFloat("uExposure", gTuning.Get("exposure", 0.5f));
         glBindVertexArray(fullscreenVAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // ======================================================================
+        // SSAO Debug View (F4): 将遮蔽贴图直接绘制到屏幕上
+        // ======================================================================
+        if (ssaoDebugView)
+        {
+            glDisable(GL_DEPTH_TEST);
+            ssaoDebugShader.Use();
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
+            ssaoDebugShader.SetInt("uTexture", 0);
+
+            glBindVertexArray(fullscreenVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
 
         // ======================================================================
         // 2D UI 渲染（正交投影，永远贴在最上层）
