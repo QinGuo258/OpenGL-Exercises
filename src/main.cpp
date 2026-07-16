@@ -80,6 +80,12 @@ GameState currentGameState = GameState::MENU;
 bool isRaining = false;
 float rainIntensity = 0.0f;
 
+// 战斗参数（每帧从 gTuning 同步，供 processInput 使用）
+float g_attackMaxRange = 3.5f;
+int   g_swordDamage = 7, g_emptyHandDamage = 1, g_sweepAoeDamage = 3;
+float g_knockbackH = 5.0f, g_knockbackV = 4.5f;
+float g_sweepAoeRange = 3.0f, g_sweepAoeCone = 0.707f;
+
 // 第一人称手臂动画控制（全局指针，main() 中初始化）
 Animator* gFpAnimator = nullptr;
 std::shared_ptr<Animation> gFpAttackAnim = nullptr;
@@ -89,8 +95,6 @@ int activeSlot = 0;  // 快捷栏当前选中槽位 (0-8)
 
 bool showDebugScreen = false;
 bool f3KeyPressed = false;
-bool ssaoDebugView = false;     // F4 切换 SSAO 遮蔽贴图可视化
-bool f4KeyPressed = false;
 
 // 中文 TrueType 字体渲染器
 FontRenderer fontRenderer;
@@ -291,7 +295,7 @@ void processInput(GLFWwindow* window, Player& player, std::vector<Enemy>& enemie
         // 射线始终从玩家眼睛发出，不受第三人称视角距离影响
         glm::vec3 rayOrigin = player.Position + thirdPersonCamera.EyeOffset;
         glm::vec3 rayDir = thirdPersonCamera.GetFullFrontVector(); // 包含俯仰角的真实 3D 准星方向
-        float maxHitDistance = 3.5f;
+        float maxHitDistance = g_attackMaxRange;
 
         float closestHitDist = 9999.0f;
         Enemy* primaryEnemy = nullptr;
@@ -319,12 +323,11 @@ void processInput(GLFWwindow* window, Player& player, std::vector<Enemy>& enemie
         if (primaryEnemy != nullptr)
         {
             bool isHoldingSword = (activeSlot == 0); // 假定 slot 0 是剑
-            int primaryDamage = isHoldingSword ? 7 : 1;
+            int primaryDamage = isHoldingSword ? g_swordDamage : g_emptyHandDamage;
 
-            // 击退方向为摄像机的水平朝向
+            // 击退方向为摄像机的水平朝向（力度从 tuning.json 读取）
             glm::vec3 kbDir = thirdPersonCamera.GetFrontVector();
-            // 极其强烈的击飞反馈：水平向后推 6.0，并给一个 4.5 的上升滞空力
-            glm::vec3 knockback = kbDir * 5.0f + glm::vec3(0.0f, 4.5f, 0.0f);
+            glm::vec3 knockback = kbDir * g_knockbackH + glm::vec3(0.0f, g_knockbackV, 0.0f);
 
             // 1. 播放武器挥击音效 + 剑气粒子特效
             if (isHoldingSword)
@@ -398,17 +401,14 @@ void processInput(GLFWwindow* window, Player& player, std::vector<Enemy>& enemie
                     diff.y = 0.0f;
                     float dist2D = glm::length(diff);
 
-                    if (dist2D < 3.0f) // 横扫范围略小 (3 米)
+                    if (dist2D < g_sweepAoeRange)
                     {
                         glm::vec3 dirToEnemy = diff / dist2D; // 归一化
-                        // 计算与玩家正前方的夹角点积
                         float dotProd = glm::dot(kbDir, dirToEnemy);
 
-                        // 0.707 约等于正前方左右 45 度 (总 90 度扇形)
-                        if (dotProd > 0.707f)
+                        if (dotProd > g_sweepAoeCone)
                         {
-                            // 横扫造成 3 点伤害，享受相同的击飞效果！
-                            enemy.TakeDamage(3, knockback);
+                            enemy.TakeDamage(g_sweepAoeDamage, knockback);
 
                             // 横扫命中播放受击或死亡音效
                             bool sweepIsSkeleton = (enemy.Type == EnemyType::SKELETON);
@@ -521,16 +521,6 @@ void processInput(GLFWwindow* window, Player& player, std::vector<Enemy>& enemie
         f3KeyPressed = false;
     }
 
-    // F4 键切换 SSAO 遮蔽贴图可视化（边缘触发）
-    if (glfwGetKey(window, GLFW_KEY_F4) == GLFW_PRESS) {
-        if (!f4KeyPressed) {
-            ssaoDebugView = !ssaoDebugView;
-            f4KeyPressed = true;
-            printf("[F4] SSAO debug view: %s\n", ssaoDebugView ? "ON" : "OFF");
-        }
-    } else {
-        f4KeyPressed = false;
-    }
 
     thirdPersonCamera.SetSneakOffset(player.GetVisualYOffset());
     thirdPersonCamera.TargetPosition = player.Position;
@@ -729,7 +719,7 @@ private:
     }
 };
 
-static TuningConfig gTuning;
+TuningConfig gTuning;
 
 static void ReloadTuning() {
     if (gTuning.Load(SHADER_SRC_DIR "tuning.json")) {
@@ -866,9 +856,6 @@ int main()
     // SSAO 模糊着色器（4×4 均值模糊，消除高频噪点）
     Shader ssaoBlurShader("shaders/fullscreen.vert", "shaders/ssao_blur.frag");
 
-    // SSAO 调试可视化着色器（R→灰度，F4 键切换）
-    Shader ssaoDebugShader("shaders/fullscreen.vert", "shaders/ssao_debug.frag");
-
     // 碰撞三角形 Debug Draw：提取线段顶点 → GPU VAO
     Shader debugShader("shaders/debug.vert", "shaders/debug.frag");
 
@@ -891,7 +878,7 @@ int main()
     std::vector<Shader*> allShaders = {
         &shader, &shadowShader, &shadowSkinnedShader,
         &gBufferShader, &gBufferSkinnedShader,
-        &ssaoShader, &ssaoBlurShader, &ssaoDebugShader,
+        &ssaoShader, &ssaoBlurShader,
         &debugShader, &skyShader, &rainShader, &uiShader,
         &blurShader, &hdrComposeShader, &godraysShader, &ssrShader
     };
@@ -1280,11 +1267,13 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // SSAO 采样核心上传（每次热重载后需要重新上传，因为 Reload 会创建新的 GL 程序对象）
-    auto uploadSsaokernel = [&]() {
+    // SSAO 参数上传（每次热重载后需要重新上传，因为 Reload 会创建新的 GL 程序对象）
+    auto uploadSsaoParams = [&]() {
         ssaoShader.Use();
         for (unsigned int i = 0; i < 64; ++i)
             ssaoShader.SetVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+        ssaoShader.SetFloat("uRadius", gTuning.Get("ssaoRadius", 3.0f));
+        ssaoShader.SetFloat("uBias",   gTuning.Get("ssaoBias", 0.02f));
     };
 
     // ======================================================================
@@ -1353,10 +1342,16 @@ int main()
     }
 
     // 热重载创建了新的 GL 程序对象，必须重新上传 SSAO 采样核心
-    uploadSsaokernel();
+    uploadSsaoParams();
 
-    // 启动时加载运行时配置
+    // 启动时加载运行时配置，同步玩家参数
     ReloadTuning();
+    player.WalkSpeed   = gTuning.Get("walkSpeed", 4.0f);
+    player.SprintSpeed = gTuning.Get("sprintSpeed", 8.0f);
+    player.SneakSpeed  = gTuning.Get("sneakSpeed", 2.0f);
+    player.EatSpeed    = gTuning.Get("eatSpeed", 1.6f);
+    player.JumpForce   = gTuning.Get("jumpForce", 6.0f);
+    player.Gravity     = gTuning.Get("gravity", -19.6f);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -1485,7 +1480,7 @@ int main()
 
         // 降雨强度平滑过渡（约 2 秒内完成）
         float targetRain = isRaining ? 1.0f : 0.0f;
-        rainIntensity += (targetRain - rainIntensity) * deltaTime * 0.2f;
+        rainIntensity += (targetRain - rainIntensity) * deltaTime * gTuning.Get("rainTransitionSpeed", 0.2f);
 
         // 下雨音效：首次下雨时随机选一首循环播放，音量跟随 rainIntensity
         if (rainIntensity > 0.01f) {
@@ -1517,7 +1512,7 @@ int main()
 
         // 风力相位累积：每帧按当前风速递增，避免 uTime * windSpeed 在降雨过渡时
         // 因 d(windSpeed)/dt 项乘以巨大的 uTime 产生高频抖动
-        windPhase += (2.0f + rainIntensity * 4.0f) * deltaTime;
+        windPhase += (gTuning.Get("windBaseSpeed", 2.0f) + rainIntensity * gTuning.Get("windRainSpeed", 4.0f)) * deltaTime;
 
         // 玩家无敌时间递减
         if (playerImmunityTimer > 0.0f) playerImmunityTimer -= deltaTime;
@@ -1526,9 +1521,10 @@ int main()
         if (isEating)
         {
             eatingTimer += deltaTime;
-            if (eatingTimer >= 1.5f)
+            if (eatingTimer >= gTuning.Get("eatingChargeTime", 1.5f))
             {
-                playerHP = std::min(playerHP + 4, 20);
+                playerHP = std::min(playerHP + gTuning.GetInt("eatingHealAmount", 4),
+                                    gTuning.GetInt("playerMaxHP", 20));
                 eatingTimer = 0.0f;
             }
         }
@@ -1536,11 +1532,21 @@ int main()
         // 玩家死亡重生
         if (playerHP <= 0)
         {
-            playerHP = 20;
+            playerHP = gTuning.GetInt("playerMaxHP", 20);
             player.Position = glm::vec3(-20.0f, -7.0f, -13.0f);
             player.Velocity = glm::vec3(0.0f);
             player.isGrounded = false;
         }
+
+        // 每帧从 tuning.json 同步战斗参数（供 processInput 使用）
+        g_attackMaxRange = gTuning.Get("attackMaxRange", 3.5f);
+        g_swordDamage    = gTuning.GetInt("swordDamage", 7);
+        g_emptyHandDamage = gTuning.GetInt("emptyHandDamage", 1);
+        g_sweepAoeDamage = gTuning.GetInt("sweepAoeDamage", 3);
+        g_knockbackH     = gTuning.Get("knockbackHorizontal", 5.0f);
+        g_knockbackV     = gTuning.Get("knockbackVertical", 4.5f);
+        g_sweepAoeRange  = gTuning.Get("sweepAoeRange", 3.0f);
+        g_sweepAoeCone   = gTuning.Get("sweepAoeCone", 0.707f);
 
         processInput(window, player, enemies);
         player.UpdatePhysics(deltaTime, mapCollision);
@@ -1552,15 +1558,17 @@ int main()
             enemy.UpdateAI(deltaTime, player.Position);
             enemy.UpdatePhysics(deltaTime, mapCollision);
 
-            // 僵尸撕咬判定
+            // 僵尸撕咬判定（参数从 tuning.json 读取）
             float dist = glm::distance(enemy.Position, player.Position);
-            if (dist <= 1.5f && enemy.AttackCooldown <= 0.0f && playerImmunityTimer <= 0.0f)
+            float biteRange = gTuning.Get("zombieBiteRange", 1.5f);
+            float biteCD = gTuning.Get("zombieAttackCooldown", 1.5f);
+            if (dist <= biteRange && enemy.AttackCooldown <= 0.0f && playerImmunityTimer <= 0.0f)
             {
-                enemy.AttackCooldown = 1.5f;
+                enemy.AttackCooldown = biteCD;
 
                 // 玩家扣血并获得无敌时间
-                playerHP -= 2;
-                playerImmunityTimer = 0.5f;
+                playerHP -= gTuning.GetInt("zombieBiteDamage", 2);
+                playerImmunityTimer = gTuning.Get("playerImmunityTime", 0.5f);
 
                 // 击退：沿僵尸指向玩家的水平方向
                 glm::vec3 pushDir = player.Position - enemy.Position;
@@ -1573,7 +1581,9 @@ int main()
                 {
                     pushDir = thirdPersonCamera.GetFrontVector();
                 }
-                player.Velocity = pushDir * 5.0f + glm::vec3(0.0f, 3.5f, 0.0f);
+                float pkH = gTuning.Get("playerKnockbackHorizontal", 5.0f);
+                float pkV = gTuning.Get("playerKnockbackVertical", 3.5f);
+                player.Velocity = pushDir * pkH + glm::vec3(0.0f, pkV, 0.0f);
                 player.isGrounded = false;
 
                 // 播放受伤音效
@@ -1729,7 +1739,7 @@ int main()
         {
             bool isActuallySprinting = player.IsRunningMode && isMovingForward && !player.IsSneaking;
             float targetFOV = isActuallySprinting ? gTuning.Get("sprintFov", 55.0f) : gTuning.Get("defaultFov", 45.0f);
-            currentFOV = glm::mix(currentFOV, targetFOV, deltaTime * 8.0f);
+            currentFOV = glm::mix(currentFOV, targetFOV, deltaTime * gTuning.Get("fovInterpSpeed", 8.0f));
             thirdPersonCamera.SetFOV(currentFOV);
         }
 
@@ -1806,15 +1816,22 @@ int main()
             currentZenithColor  = nightZenith;
         }
 
-        // 光源位置：玩家位置沿光线反方向延伸 50 米
-        glm::vec3 lightPos = player.Position - activeLightDir * 50.0f;
+        // 光源位置：玩家位置沿光线反方向延伸（距离从 tuning.json 读取）
+        float shadowDist = gTuning.Get("shadowLightDistance", 50.0f);
+        glm::vec3 lightPos = player.Position - activeLightDir * shadowDist;
+
+        // 风力参数（多个 Pass 共用，从 tuning.json 读取一次）
+        float windBaseStr = gTuning.Get("windBaseStrength", 0.05f);
+        float windRainStr = gTuning.Get("windRainStrength", 0.05f);
 
         // 光源视图矩阵：太阳摄像机盯着玩家
         glm::mat4 lightView = glm::lookAt(lightPos, player.Position, glm::vec3(0.0f, 1.0f, 0.0f));
 
-        // 正交投影矩阵（平行光无透视）
-        float near_plane = 1.0f, far_plane = 100.0f;
-        glm::mat4 lightProjection = glm::ortho(-40.0f, 40.0f, -40.0f, 40.0f, near_plane, far_plane);
+        // 正交投影矩阵（平行光无透视，参数从 tuning.json 读取）
+        float orthoSize = gTuning.Get("shadowOrthoSize", 40.0f);
+        float near_plane = gTuning.Get("shadowNearPlane", 1.0f);
+        float far_plane = gTuning.Get("shadowFarPlane", 100.0f);
+        glm::mat4 lightProjection = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, near_plane, far_plane);
 
         // 光源空间变换矩阵
         glm::mat4 lightSpaceMatrix = lightProjection * lightView;
@@ -1830,6 +1847,12 @@ int main()
         shadowShader.Use();
         shadowShader.SetMat4("uLightSpaceMatrix", lightSpaceMatrix);
         shadowShader.SetMat4("uModel", mapModelMatrix);
+        shadowShader.SetFloat("uTime", (float)glfwGetTime());
+        shadowShader.SetFloat("uRainIntensity", rainIntensity);
+        shadowShader.SetFloat("uWindBaseSpeed",    gTuning.Get("windBaseSpeed", 2.0f));
+        shadowShader.SetFloat("uWindRainSpeed",    gTuning.Get("windRainSpeed", 4.0f));
+        shadowShader.SetFloat("uWindBaseStrength", windBaseStr);
+        shadowShader.SetFloat("uWindRainStrength", windRainStr);
         for (const auto& mesh : mapModel.GetMeshes())
         {
             if (mesh.materialType == 4) continue;
@@ -1903,6 +1926,8 @@ int main()
         gBufferShader.SetFloat("uTime", (float)glfwGetTime());
         gBufferShader.SetFloat("uRainIntensity", rainIntensity);
         gBufferShader.SetFloat("uWindPhase", windPhase);
+        gBufferShader.SetFloat("uWindBaseStrength", windBaseStr);
+        gBufferShader.SetFloat("uWindRainStrength", windRainStr);
         for (const auto& mesh : mapModel.GetMeshes())
         {
             if (mesh.materialType == 4) continue;
@@ -1910,16 +1935,16 @@ int main()
             mesh.Draw(gBufferShader.ID());
         }
 
-        // 2. 画玩家、敌怪、手持武器 (骨骼动画几何体)
+        // 2. 骨骼动画几何体：只有敌怪需要写入 G-Buffer。
+        //    玩家身体和手持物品已移除——动态实体写入 G-Buffer 会产生幽灵 SSAO 光晕。
         gBufferSkinnedShader.Use();
         gBufferSkinnedShader.SetMat4("uProjection", thirdPersonCamera.GetProjectionMatrix());
         gBufferSkinnedShader.SetMat4("uView", thirdPersonCamera.GetViewMatrix());
 
-        // 2a. 玩家 (第一人称下跳过，防止身体写入 G-Buffer 产生幽灵 SSAO 遮蔽)
-        if (renderPlayerBody)
-        {
-            player.Draw(gBufferSkinnedShader);
-        }
+        // 2a. 玩家已从 G-Buffer 中彻底移除（所有视角）。
+        //     玩家是动态实体，写入 G-Buffer 会在角色轮廓周围产生幽灵 SSAO 光晕，
+        //     与之前草/树叶的薄片几何体遮蔽问题类似。
+        //     玩家身体仅绘制于 Shadow Map + 主场景，SSAO 对其无影响。
 
         // 2b. 敌怪
         for (auto& enemy : enemies)
@@ -1936,30 +1961,10 @@ int main()
             arrow.Draw(gBufferShader, &arrowModel);
         }
 
-        // 2d. 第三人称手持物品 (骨骼挂载到 Right Arm_bone)
-        if (thirdPersonCamera.CurrentMode != CameraMode::FirstPerson && hotbarModels[activeSlot] != nullptr)
-        {
-            glm::mat4 playerMat = player.GetModelMatrix();
-            glm::mat4 handBoneMat = player.GetBoneTransform("Right Arm_bone");
-            glm::mat4 itemOffset = glm::mat4(1.0f);
-            itemOffset = glm::translate(itemOffset, glm::vec3(0.55f, 0.45f, -0.2f));
-            itemOffset = glm::rotate(itemOffset, glm::radians(-85.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-            itemOffset = glm::scale(itemOffset, glm::vec3(1.0f));
-            glm::mat4 itemModelMat = playerMat * handBoneMat * itemOffset;
-
-            // 清除骨骼矩阵，防止静态道具被骨骼形变干扰
-            for (int i = 0; i < 100; ++i)
-                gBufferSkinnedShader.SetMat4("finalBonesMatrices[" + std::to_string(i) + "]", glm::mat4(1.0f));
-            gBufferSkinnedShader.Use();
-            gBufferSkinnedShader.SetMat4("uProjection", thirdPersonCamera.GetProjectionMatrix());
-            gBufferSkinnedShader.SetMat4("uView", thirdPersonCamera.GetViewMatrix());
-            gBufferSkinnedShader.SetMat4("uModel", itemModelMat);
-            hotbarModels[activeSlot]->Draw(gBufferSkinnedShader.ID());
-        }
-
-        // 2e.【移除】第一人称手臂/手持物品已从 G-Buffer 中彻底删除。
-        //     它们只允许在 Pass 4（主场景深度缓冲清空后）绘制，
-        //     否则会在 SSAO 中产生巨大的漂浮环境遮蔽污染。
+        // 2d. 第三人称手持物品已从 G-Buffer 中移除。
+        //     与玩家身体同理：手持物品是挂载在骨骼上的动态几何体，
+        //     写入 G-Buffer 会在其轮廓周围产生幽灵 SSAO 遮蔽光晕。
+        //     物品仅绘制于主场景 + Shadow Map（玩家已覆盖），SSAO 对其无影响。
 
         // ======================================================================
         // Pass 1.8: SSAO 遮蔽计算 (读取 G-Buffer → 半球采样 → 输出遮蔽掩码)
@@ -2019,6 +2024,18 @@ int main()
         shader.SetFloat("uTime", (float)glfwGetTime());
         shader.SetFloat("uWindPhase", windPhase);
         shader.SetBool("uDisableSsao", false);
+
+        // 大气雾参数 (从 tuning.json 读取)
+        shader.SetFloat("uFogDensityClear", gTuning.Get("fogDensityClear", 0.0005f));
+        shader.SetFloat("uFogDensityRain",  gTuning.Get("fogDensityRain", 0.005f));
+        glm::vec3 fogClear = gTuning.GetVec3("fogColorClear", glm::vec3(0.6f, 0.8f, 0.95f));
+        glm::vec3 fogRain  = gTuning.GetVec3("fogColorRain",  glm::vec3(0.4f, 0.45f, 0.5f));
+        shader.SetVec3("uFogColorClear", fogClear.x, fogClear.y, fogClear.z);
+        shader.SetVec3("uFogColorRain",  fogRain.x,  fogRain.y,  fogRain.z);
+
+        // 风力参数（复用上方声明的 windBaseStr / windRainStr）
+        shader.SetFloat("uWindBaseStrength", windBaseStr);
+        shader.SetFloat("uWindRainStrength", windRainStr);
 
         // 夜色系数：黄昏前后平滑过渡，太阳高度角在 0.15 到 -0.05 之间线性插值
         float nightFadeValue = glm::clamp(1.0f - (sunY + 0.05f) * 5.0f, 0.0f, 1.0f);
@@ -2114,6 +2131,11 @@ int main()
         // 仅在第三人称下绘制玩家世界模型
         if (renderPlayerBody)
         {
+            // 禁用玩家身体/手持物品的 SSAO：角色是移动实体，
+            // SSAO 贴图基于静态场景生成，其遮蔽值代表背景而非角色本身，
+            // 会导致角色身上出现不自然的"背景阴影"。
+            shader.SetBool("uDisableSsao", true);
+
             shader.SetBool("uIsHit", false);
             shader.SetInt("uMaterialType", 0);
             player.Draw(shader);
@@ -2148,6 +2170,9 @@ int main()
                 // 5. 绘制物品
                 hotbarModels[activeSlot]->Draw(shader.ID());
             }
+
+            // 恢复 SSAO 状态，防止角色/物品的 uDisableSsao 泄漏到后续绘制
+            shader.SetBool("uDisableSsao", false);
         }
 
         // Debug Draw：碰撞三角形线框（绿色，F6 切换）
@@ -2210,8 +2235,14 @@ int main()
                     ++reloaded;
                 }
                 printf("[Shader] Hot-reloaded %d/%zu shaders\n", reloaded, allShaders.size());
-                ReloadTuning();  // 同步重载运行时参数
-                uploadSsaokernel(); // 热重载创建了新 GL 程序，SSAO 采样核心需重新上传
+                ReloadTuning();  // 同步重载运行时参数与玩家物理
+                player.WalkSpeed   = gTuning.Get("walkSpeed", 4.0f);
+                player.SprintSpeed = gTuning.Get("sprintSpeed", 8.0f);
+                player.SneakSpeed  = gTuning.Get("sneakSpeed", 2.0f);
+                player.EatSpeed    = gTuning.Get("eatSpeed", 1.6f);
+                player.JumpForce   = gTuning.Get("jumpForce", 6.0f);
+                player.Gravity     = gTuning.Get("gravity", -19.6f);
+                uploadSsaoParams(); // 热重载创建了新 GL 程序，SSAO 采样核心需重新上传
             }
             f1WasPressed = f1Pressed;
         }
@@ -2335,6 +2366,11 @@ int main()
         skyShader.SetVec3("uZenithColor",  currentZenithColor.x,  currentZenithColor.y,  currentZenithColor.z);
         skyShader.SetVec3("uSunDir", sunPosDir.x, sunPosDir.y, sunPosDir.z);
         skyShader.SetFloat("uRainIntensity", rainIntensity);
+        // 体积云参数 (从 tuning.json 读取)
+        skyShader.SetInt("uCloudViewSteps",  gTuning.GetInt("cloudViewSteps", 16));
+        skyShader.SetInt("uCloudLightSteps", gTuning.GetInt("cloudLightSteps", 2));
+        skyShader.SetFloat("uCloudMinHeight", gTuning.Get("cloudMinHeight", 300.0f));
+        skyShader.SetFloat("uCloudMaxHeight", gTuning.Get("cloudMaxHeight", 550.0f));
         glBindVertexArray(skyVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         glBindVertexArray(0);
@@ -2522,7 +2558,8 @@ int main()
             blurSourceTex = 1;    // 从上帝光贴图开始模糊
         }
 
-        for (unsigned int i = 0; i < 6; ++i)
+        int blurIters = gTuning.GetInt("bloomBlurIterations", 6);
+        for (unsigned int i = 0; i < (unsigned int)blurIters; ++i)
         {
             glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
             blurShader.SetBool("uHorizontal", horizontal);
@@ -2551,23 +2588,9 @@ int main()
         hdrComposeShader.SetInt("uBloomTex", 1);
         hdrComposeShader.SetFloat("uBloomIntensity", gTuning.Get("bloomIntensity", 0.35f));
         hdrComposeShader.SetFloat("uExposure", gTuning.Get("exposure", 0.5f));
+        hdrComposeShader.SetFloat("uSaturation", gTuning.Get("saturation", 1.25f));
         glBindVertexArray(fullscreenVAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-
-        // ======================================================================
-        // SSAO Debug View (F4): 将遮蔽贴图直接绘制到屏幕上
-        // ======================================================================
-        if (ssaoDebugView)
-        {
-            glDisable(GL_DEPTH_TEST);
-            ssaoDebugShader.Use();
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
-            ssaoDebugShader.SetInt("uTexture", 0);
-
-            glBindVertexArray(fullscreenVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
 
         // ======================================================================
         // 2D UI 渲染（正交投影，永远贴在最上层）

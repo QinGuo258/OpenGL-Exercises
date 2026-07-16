@@ -7,6 +7,10 @@ uniform vec3 uSunDir;       // 指向太阳的向量
 uniform mat4 uStarMatrix;   // 天球逆矩阵：将 viewDir 变换回天球本地坐标系
 uniform float uTime;
 uniform float uRainIntensity;
+uniform int uCloudViewSteps;     // 云视线步进次数 (tuning.json, 默认 16)
+uniform int uCloudLightSteps;    // 云光源步进次数 (tuning.json, 默认 2)
+uniform float uCloudMinHeight;   // 云层底部高度 (tuning.json, 默认 300.0)
+uniform float uCloudMaxHeight;   // 云层顶部高度 (tuning.json, 默认 550.0)
 
 // --- 1. 3D 空间噪声与 FBM ---
 float hash3D(vec3 p) {
@@ -151,14 +155,14 @@ void main()
     // --- 3. 双重光线步进体积云 (True 3D Volumetric Raymarching) ---
     // 只有仰角大于 0.02 时才画云，忽略地面方向
     if (viewDir.y > 0.02) {
-        float cloudMin = 300.0;
-        float cloudMax = 550.0; // 云层现在有 200 米的真实物理厚度
+        float cloudMin = uCloudMinHeight;
+        float cloudMax = uCloudMaxHeight;
         float tMin = cloudMin / viewDir.y;
         float tMax = cloudMax / viewDir.y;
         vec3 pMin = viewDir * tMin;
         vec3 pMax = viewDir * tMax;
 
-        int steps = 16; // 主视觉步进次数（IG 抖动伪遮挡替代高步数）
+        int steps = uCloudViewSteps; // 从 tuning.json 读取
         vec3 stepVec = (pMax - pMin) / float(steps);
         float stepSize = length(stepVec);
         vec3 currentPos = pMin;
@@ -194,7 +198,7 @@ void main()
 
             if (density > 0.0) {
                 // --- 第二重循环：光源步进 (计算真实物理自阴影) ---
-                int lightSteps = 2;
+                int lightSteps = uCloudLightSteps;
                 float lightStepSize = 40.0;
                 vec3 lPos = currentPos;
                 float lightDensity = 0.0;

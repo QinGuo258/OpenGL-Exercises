@@ -109,13 +109,13 @@ Pass 1b — Rain Occlusion Depth (FBO: rainDepthMap, 1024×1024, if rainIntensit
  20. shadowShader → mapModel only (no player)
 
 Pass 1.5 — G-Buffer Geometric Pre-Pass (FBO: gBuffer, RGBA16F × 2 + DEPTH24):
- 21. gBufferShader → mapModel (view-space position + normal)
+ 21. gBufferShader → mapModel (view-space position + normal). Per-mesh `uMaterialType` set for wind sync with model.vert — critical for SSAO correctness.
  22. gBufferSkinnedShader → player (only when `renderPlayerBody`), enemies, arrows, 3rd-person held items (FP arm/items intentionally excluded — they'd contaminate SSAO)
 
-Pass 1.8 — SSAO Generation (FBO: ssaoFBO, GL_RED):
- 23. ssaoShader + fullscreenVAO: reads gPosition + gNormal + noiseTexture, 16-tap hemisphere sampling
+Pass 1.8 — SSAO Generation (FBO: ssaoFBO, GL_R16F):
+ 23. ssaoShader + fullscreenVAO: reads gPosition + gNormal + noiseTexture, stride-4 16-tap hemisphere sampling (radius=3.0m, bias=0.02)
 
-Pass 1.9 — SSAO Blur (FBO: ssaoBlurFBO, GL_RED):
+Pass 1.9 — SSAO Blur (FBO: ssaoBlurFBO, GL_R16F):
  24. ssaoBlurShader + fullscreenVAO: 4×4 box blur on ssaoColorBuffer → ssaoColorBufferBlur
 
 Pass 2 — Main Scene (FBO: hdrFBO, RGBA16F + DEPTH24):
@@ -204,11 +204,11 @@ The key variable is `activeLightDir`. When `sunY > 0`: sun shines downward (`act
 | `model.vert/frag` | Main Blinn-Phong + skeletal animation (100 bones) + **Poisson disk soft shadows** (16 taps, random rotation) + rain wetness/puddles + **water surface** (materialType==4: vertex wave displacement, noisy normal perturbation via `uPackedNoiseMap` on tex unit 12, Fresnel sky reflection with nightFade, sun glint pow-256 ×10, view-angle-driven alpha 0.4–0.9) + fresnel reflection + **atmospheric distance fog** (light blue, 0.0005 density) + wind animation (grass/leaves) + emissive materials + hit flash (`uIsHit`) + **SSAO ambient occlusion** (`uSsaoMap` on texture unit 13) + **dynamic torch point light** (slot 1 adds movable light at player position). Specular only for `uMaterialType==5` (handheld items) or wet surfaces. Requires `uniform float uTime` for water animation. |
 | `shadow.vert/frag` | Static geometry depth-only render. Also reused for rain occlusion depth pass. |
 | `shadow_skinned.vert` + `shadow.frag` | Skinned player/enemy model depth-only render. |
-| `g_buffer.vert/frag` | Static geometry → view-space position (COLOR0, RGBA16F) + view-space normal (COLOR1, RGBA16F). Wind sway synced. |
+| `g_buffer.vert/frag` | Static geometry → view-space position (COLOR0, RGBA16F) + view-space normal (COLOR1, RGBA16F). Wind sway synced with `model.vert` via `uMaterialType` uniform (must stay in sync to prevent SSAO ghost shadows). |
 | `g_buffer_skinned.vert` + `g_buffer.frag` | Bone-animated geometry → G-Buffer (same outputs). 4-bone weighted blending. |
 | `sky.vert/frag` | Procedural skybox: gradient, stars (gridded hash anti-flicker), Minecraft-style block sun/moon, halos, **optimized volumetric clouds** (16 view steps + 2 light steps + IGN jitter for artefact-free low-step march). |
 | `rain.vert/frag` | VBO-less particle rain: `gl_VertexID` → 10000 raindrops, 40m³ camera-following box, rain occlusion discard. |
-| `ssao.frag` (+ `fullscreen.vert`) | 16-tap hemisphere SSAO sampling with TBN noise rotation, range check, projection to screen-space depth buffer. |
+| `ssao.frag` (+ `fullscreen.vert`) | 16-tap hemisphere SSAO sampling with TBN noise rotation, range check, projection to screen-space depth buffer. stride-4 kernel coverage. |
 | `ssao_blur.frag` (+ `fullscreen.vert`) | 4×4 box blur on SSAO output, eliminates 4×4 noise tile high-frequency artefacts. |
 | `ui.vert/frag` | 2D orthographic UI + **3D billboard particles** + **TrueType font glyphs**: unit-square TRS, `uProjection * uModel`, sprite-sheet via `uUvScale`/`uUvOffset`, `uAlpha` for fade-out. **Font mode** (`uIsFont=true`): uses `uFontColor`, atlas UV per-glyph, `GL_RED` texture. **Solid color mode** (`uUseTexture=false`): renders `uSolidColor` fill (used for black-screen overlay, menu backgrounds, chat panels). |
 | `debug.vert/frag` | Green wireframe overlay for collision triangles (F6). |
@@ -244,10 +244,19 @@ A `tuning.json` config file in `shaders/` stores rendering parameters that can b
 
 **Supported parameter categories**:
 - Lighting colors (dayLight, sunsetLight, moonLight, ambient, horizon, zenith)
-- Post-processing (bloomIntensity, exposure, godrayWeight/Density/Decay)
+- Shadow mapping (shadowLightDistance, shadowOrthoSize, shadowNearPlane, shadowFarPlane)
+- SSAO (ssaoRadius, ssaoBias)
+- Point lights (pointLightMaxRange, pointLightAttenLinear/Quad, pointLightEdgeFade, pointLightIntensity)
+- Atmospheric fog (fogDensityClear/Rain, fogColorClear/Rain)
+- Volumetric clouds (cloudViewSteps, cloudLightSteps, cloudMinHeight, cloudMaxHeight)
+- Weather / wind (rainTransitionSpeed, windBaseSpeed/RainSpeed, windBaseStrength/RainStrength, rainOverallDarken)
+- Post-processing (bloomIntensity, exposure, bloomBlurIterations, saturation, godrayWeight/Density/Decay)
 - SSR (ssrMaxDistance, ssrRaySteps, ssrRefinementSteps)
 - Material (specularStrength, shininess)
-- Camera (defaultFov, sprintFov)
+- Camera (defaultFov, sprintFov, fovInterpSpeed)
+- Player physics (walkSpeed, sprintSpeed, sneakSpeed, eatSpeed, jumpForce, gravity, playerMaxHP)
+- Eating (eatingHealAmount, eatingChargeTime)
+- Combat (attackMaxRange, swordDamage, emptyHandDamage, sweepAoeDamage/Range/Cone, knockbackHorizontal/Vertical, zombieBiteRange/Damage/Cooldown, playerImmunityTime, playerKnockbackHorizontal/Vertical)
 
 Adding a new parameter: add its key to `tuning.json`, then replace the hardcoded value in `main.cpp` with `gTuning.Get("key", fallback)`.
 
@@ -286,7 +295,7 @@ Post-processing pass inserted after HDR scene assembly, before Bloom. **Reads G-
 
 | Parameter | File:Line | Current | Effect |
 |-----------|-----------|---------|--------|
-| `uMaxDistance` | `main.cpp` | `15.0` | Max ray-march distance in view-space meters |
+| `uMaxDistance` | `tuning.json` | `30.0` | Max ray-march distance in view-space meters |
 | `uRaySteps` | `main.cpp` | `40` | Linear march iterations |
 | `uRefinementSteps` | `main.cpp` | `4` | Binary search refinement iterations |
 | SSR resolution | `main.cpp` | `960×540` | Half-res for performance (~21M samples vs 83M) |
@@ -317,8 +326,8 @@ Classified by **material name** at load time in `Model::ProcessMesh()`. Each `Me
 | Type | Meaning | Keyword match | Shader behavior |
 |------|---------|---------------|-----------------|
 | 0 | Default (stone, wood, dirt…) | Everything else | Standard Blinn-Phong, **no specular** (unless wet) |
-| 1 | Plants (non-solid) | `grass`(not block), `wheat`, `crop`, `flower`, `plant`, `fern`, `tall`, `vine` | Wind sway (root-anchored), **no collision** (skipped in CollisionWorld) |
-| 2 | Leaves | `leaves` | Wind sway (uniform), no specular |
+| 1 | Plants (non-solid) | `grass`(not block), `wheat`, `crop`, `flower`, `plant`, `fern`, `tall`, `vine`, `tulip`, `daisy`, `orchid`, `allium`, `bluet`, `dandelion`, `poppy`, `lilac`, `rose`, `lily`, `mushroom`, `sapling`, `roots`, `bush`, `cane`, `dripleaf`, `blossom`, `lichen`, `berry`, `coral`, `pickle`, `beetroots`, `carrots`, `potatoes` | Wind sway (root-anchored), **no collision** (skipped in CollisionWorld), 30% SSAO strength |
+| 2 | Leaves | `leaves` | Wind sway (uniform), no specular, 50% SSAO strength |
 | 3 | Emissive | `lava`, `torch`, `glowstone`, `lantern` | Ignores shadow/ambient, `emission = texColor * 1.2` × 90% |
 | 4 | Water surfaces | `water`, `fluid`, `ocean`, `river` | **Vertex wave animation**, noisy normal perturbation, Fresnel sky reflection, sun glint (pow 256, ×10), alpha blending (fresnel-driven 0.4–0.9). **No collision**. Two-pass rendering in Pass 2: opaque first, then translucent water with `glDepthMask(FALSE)` after all opaque geometry. |
 | 5 | Handheld items | Set manually at draw time in `main.cpp` | **Retains specular highlight**, no wind sway |
@@ -340,12 +349,19 @@ Three-pass system between shadow map and main scene:
 | Pass | FBO | Shader | Output |
 |------|-----|--------|--------|
 | 1.5 G-Buffer | `gBuffer` (RGBA16F×2 + DEPTH24) | `g_buffer.vert/frag`, `g_buffer_skinned.vert` | View-space position + normal |
-| 1.8 SSAO Gen | `ssaoFBO` (GL_RED) | `ssao.frag` + `fullscreen.vert` | Raw occlusion (16-tap hemisphere + 4×4 noise tile TBN rotation) |
-| 1.9 SSAO Blur | `ssaoBlurFBO` (GL_RED) | `ssao_blur.frag` + `fullscreen.vert` | Smoothed `ssaoColorBufferBlur` |
+| 1.8 SSAO Gen | `ssaoFBO` (GL_R16F) | `ssao.frag` + `fullscreen.vert` | Raw occlusion (16-tap hemisphere + 4×4 noise tile TBN rotation) |
+| 1.9 SSAO Blur | `ssaoBlurFBO` (GL_R16F) | `ssao_blur.frag` + `fullscreen.vert` | Smoothed `ssaoColorBufferBlur` |
 
-Sample kernel: 64 vec3 generated with lerp(0.1, 1.0, scale²) bias toward hemisphere origin. Shader uses only first 16. Noise: 4×4 RGBA16F random rotation vectors, `GL_REPEAT` tiled.
+Sample kernel: 64 vec3 generated with lerp(0.1, 1.0, scale²) bias toward hemisphere origin. Shader uses stride-4 sampling (indices 0,4,8,...,60) to evenly cover the full kernel range with 16 taps. Noise: 4×4 RGBA16F random rotation vectors, `GL_REPEAT` tiled.
 
-In Pass 2, `model.frag` applies: `ambient *= texture(uSsaoMap, gl_FragCoord.xy / uScreenSize).r`. Only ambient is affected — diffuse, specular, and point lights are untouched.
+**Key parameters** (`ssao.frag`): radius = `3.0` (meters), bias = `0.02`. Range check uses `smoothstep` on view-space distance ratio. Sky/background pixel protection (`length(scenePos) < 0.001`) and UV boundary check prevent invalid sampling.
+
+In Pass 2, `model.frag` applies: `ambient *= ssaoContrast` where `ssaoContrast = ssao³` (cubic contrast boost). Only ambient is affected — diffuse, specular, and point lights are untouched.
+
+**Per-material SSAO reduction** (`model.frag`): Vegetation materials use reduced SSAO to prevent thin cross-quad geometry from producing unrealistically deep self-occlusion:
+- Type 1 (grass/flowers/crops): **30%** SSAO strength
+- Type 2 (leaves): **50%** SSAO strength
+- Other materials: **100%** (full SSAO)
 
 ## Combat System
 
@@ -382,10 +398,10 @@ Knockback: `Enemy::TakeDamage(damage, knockbackVec)` → `Velocity = knockback`,
 | Zombie hurt/death | `audio/Zombie_hurt{1,2}.mp3` / `Zombie_death.mp3` |
 | Skeleton hurt/death | `audio/Skeleton_hurt1.mp3` / `Skeleton_death.mp3` |
 | Arrow hit/fire | `audio/Arrow_hit1.mp3` / `Bow_shoot.mp3` |
-
-All sounds via `ma_engine_play_sound(&audioEngine, "audio/xxx.mp3", NULL)`.
-
+| Rain ambient | `audio/Rain{1..4}.mp3` (randomly selected on first rain, looping, volume tracks `rainIntensity`, auto-stops when dry) |
 | Story bell | `audio/Bell_use1.mp3` |
+
+All sounds via `ma_engine_play_sound(&audioEngine, "audio/xxx.mp3", NULL)`. Rain uses persistent `ma_sound` with `MA_SOUND_FLAG_ASYNC` for looping control.
 
 ## Game State & Story System
 
@@ -529,4 +545,7 @@ Emissive meshes (materialType==3) have vertices clustered (0.5m radius averaging
 
 1. Create `.vert`/`.frag` in `shaders/` (auto-copied to exe dir by POST_BUILD)
 2. Instantiate `Shader` in `main.cpp` with relative paths
-3. For hot-reload support, wire an F-key edge-triggered `shader.Reload()` call
+3. For hot-reload support, add to the `allShaders` vector in `main.cpp`
+4. If the shader reads from G-Buffer (like `ssao_debug.frag`), bind the relevant texture and set uniforms as needed
+
+**⚠️ Shaders with pre-uploaded data**: Shaders that receive data via `SetVec3`/`SetMat4` on startup (e.g. SSAO sample kernel) must re-upload after hot-reload since `Reload()` creates a new GL program object. Use a lambda wrapper pattern (see `uploadSsaokernel` in `main.cpp`).

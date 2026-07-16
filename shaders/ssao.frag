@@ -8,6 +8,8 @@ uniform sampler2D texNoise;
 
 uniform vec3 samples[64];
 uniform mat4 projection;
+uniform float uRadius;   // SSAO 采样半径 (米)，默认 3.0
+uniform float uBias;     // 深度偏移消除自阴影 (米)，默认 0.02
 
 // 屏幕尺寸平铺噪声贴图 (1920/4 = 480, 1080/4 = 270)
 const vec2 noiseScale = vec2(1920.0/4.0, 1080.0/4.0);
@@ -23,8 +25,8 @@ void main() {
     mat3 TBN = mat3(tangent, bitangent, normal);
 
     float occlusion = 0.0;
-    float radius = 3.0; // SSAO 采样半径（米）
-    float bias = 0.02; // 偏移消除表面自阴影
+    float radius = uRadius; // 从 C++ tuning.json 读取
+    float bias = uBias;     // 从 C++ tuning.json 读取
     float fragDist = length(fragPos); // 眼空间距离（比纯 Z 更准确判别遮挡）
 
     for(int i = 0; i < 16; ++i) {

@@ -40,6 +40,10 @@ public:
     glm::vec3 Velocity = glm::vec3(0.0f);
     float Gravity = -19.6f;
     float JumpForce = 6.0f;
+    float WalkSpeed = 4.0f;
+    float SprintSpeed = 8.0f;
+    float SneakSpeed = 2.0f;
+    float EatSpeed = 1.6f;
     bool isGrounded = false;
     bool IsMoving = false;
     bool IsRunningMode = false;
@@ -50,6 +54,7 @@ public:
     Model& GetModel() { return m_Model; }
     PlayerState GetCurrentState() const { return m_CurrentState; }
     float GetVisualYOffset() const { return m_VisualYOffset; }
+    bool IsAttacking() const { return m_AttackAnimTimer > 0.0f; }
 
     glm::mat4 GetModelMatrix() const;
     glm::mat4 GetBoneTransform(const std::string& name) const;
@@ -61,4 +66,5 @@ private:
     PlayerState m_CurrentState = PlayerState::IDLE;
     float m_VisualYOffset = 0.0f;
     float m_TargetYOffset = 0.0f;
+    float m_AttackAnimTimer = 0.0f;     // 蹲下攻击动画剩余时间（秒），>0 表示攻击中
 };

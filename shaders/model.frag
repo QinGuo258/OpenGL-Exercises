@@ -15,6 +15,16 @@ uniform float uShininess;
 uniform float uRainIntensity;
 uniform int uMaterialType;
 
+// 大气雾参数 (从 tuning.json 读取)
+uniform float uFogDensityClear;  // 晴天雾密度, 默认 0.0005
+uniform float uFogDensityRain;   // 雨天雾密度, 默认 0.005
+uniform vec3 uFogColorClear;     // 晴天雾色 RGB
+uniform vec3 uFogColorRain;      // 雨天雾色 RGB
+
+// 风参数 (从 tuning.json 读取，控制植被摆动)
+uniform float uWindBaseStrength;  // 基础风力, 默认 0.05
+uniform float uWindRainStrength;  // 雨天附加风力, 默认 0.05
+
 uniform sampler2D uDiffuseTexture;
 uniform bool uHasDiffuseTexture;
 uniform bool uIsHit;
@@ -315,10 +325,10 @@ void main()
 
     // 距离雾：物理大气散射，晴天通透浅蓝、雨天灰暗浓雾
     float dist = gl_FragCoord.z / gl_FragCoord.w;
-    float fogDensity = mix(0.0005, 0.005, uRainIntensity); // 晴天极度通透，雨天才起浓雾
+    float fogDensity = mix(uFogDensityClear, uFogDensityRain, uRainIntensity); // 从 tuning.json 读取
     float fogFactor = exp(-pow(dist * fogDensity, 2.0));
     fogFactor = clamp(fogFactor, 0.0, 1.0);
-    vec3 atmosphereColor = mix(vec3(0.6, 0.8, 0.95), vec3(0.4, 0.45, 0.5), uRainIntensity);
+    vec3 atmosphereColor = mix(uFogColorClear, uFogColorRain, uRainIntensity);
     finalColor = mix(atmosphereColor, finalColor, fogFactor);
 
     // --- 曝光色调映射 (Exposure Tone Mapping) ---

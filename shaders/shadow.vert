@@ -10,6 +10,10 @@ uniform mat4 uModel;
 uniform float uTime;
 uniform float uRainIntensity;
 uniform int uMaterialType;
+uniform float uWindBaseSpeed;     // 基础风速 (tuning.json, 默认 2.0)
+uniform float uWindRainSpeed;     // 雨天附加风速 (tuning.json, 默认 4.0)
+uniform float uWindBaseStrength;  // 基础风力强度 (tuning.json, 默认 0.05)
+uniform float uWindRainStrength;  // 雨天附加风力 (tuning.json, 默认 0.05)
 
 void main()
 {
@@ -19,8 +23,8 @@ void main()
     // 风力摇摆：通过法线检测十字交叉面片（草丛/小麦/花），与 model.vert 保持 100% 一致
     bool isCrossedQuad = abs(aNormal.x) > 0.1 && abs(aNormal.x) < 0.9 && abs(aNormal.z) > 0.1 && abs(aNormal.z) < 0.9;
     if (isCrossedQuad) {
-        float windSpeed = 2.0 + uRainIntensity * 4.0;
-        float windStrength = 0.05 + uRainIntensity * 0.05;
+        float windSpeed = uWindBaseSpeed + uRainIntensity * uWindRainSpeed;
+        float windStrength = uWindBaseStrength + uRainIntensity * uWindRainStrength;
         float windWeight = aTexCoords.y; // 根部锚定
 
         float offsetX = sin(worldPos.x * 2.0 + uTime * windSpeed) * windStrength * windWeight;

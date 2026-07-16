@@ -5,6 +5,7 @@ uniform sampler2D uSceneTex; // FBO 场景原图
 uniform sampler2D uBloomTex; // 模糊后的发光图
 uniform float uBloomIntensity;
 uniform float uExposure;
+uniform float uSaturation;   // 饱和度增强 (tuning.json, 默认 1.25)
 
 // 好莱坞工业级 ACES 电影色调映射算法
 vec3 ACESFilm(vec3 x) {
@@ -25,11 +26,10 @@ void main() {
     // 3. 电影级 Tone Mapping
     result = ACESFilm(result);
 
-    // 3.5. 饱和度提升 (让草地和鲜花更鲜艳)
-    float saturation = 1.25; // 提升 25%
+    // 3.5. 饱和度提升 (从 tuning.json 读取)
     float luminance = dot(result, vec3(0.2126, 0.7152, 0.0722));
     vec3 grayColor = vec3(luminance);
-    result = mix(grayColor, result, saturation);
+    result = mix(grayColor, result, uSaturation);
 
     // 4. 伽马校正 (解除显示器物理偏色)
     result = pow(result, vec3(1.0 / 2.4));

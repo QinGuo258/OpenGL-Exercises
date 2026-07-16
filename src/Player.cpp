@@ -204,13 +204,26 @@ void Player::UpdateAnimation(float deltaTime)
 {
     // 始终推进时间，确保 Overlay（攻击）动画也能在待机时播放
     m_Animator.UpdateAnimation(deltaTime);
+
+    // 蹲下攻击计时：动画播完后切回蹲姿待机/行走
+    if (m_AttackAnimTimer > 0.0f)
+    {
+        m_AttackAnimTimer -= deltaTime;
+        if (m_AttackAnimTimer <= 0.0f)
+        {
+            m_AttackAnimTimer = 0.0f;
+            std::string key = IsMoving ? "sneak_walk" : "sneak_idle";
+            auto it = m_Animations.find(key);
+            if (it != m_Animations.end())
+                m_Animator.PlayAnimation(it->second);
+        }
+    }
 }
 
 void Player::UpdateMovementState(bool isMoving, bool isMovingForward)
 {
     PlayerState targetState;
     float currentSpeed = 0.0f;
-    float baseSpeed = 4.0f;
 
     // 是否真正疾跑：奔跑模式下按下 W 前进 + 不在潜行/进食状态
     bool isActuallySprinting = IsRunningMode && isMoving && isMovingForward && !IsSneaking && !IsEating;
@@ -220,7 +233,7 @@ void Player::UpdateMovementState(bool isMoving, bool isMovingForward)
         if (isMoving)
         {
             targetState = PlayerState::SNEAK_WALK;
-            currentSpeed = baseSpeed * 0.5f;
+            currentSpeed = SneakSpeed;
         }
         else
         {
@@ -229,15 +242,14 @@ void Player::UpdateMovementState(bool isMoving, bool isMovingForward)
     }
     else if (IsEating && isMoving)
     {
-        // 进食时移动速度降至疾跑速度的 20%
         targetState = PlayerState::WALK;
-        currentSpeed = baseSpeed * 2.0f * 0.2f;
+        currentSpeed = EatSpeed;
     }
     else if (isActuallySprinting)
     {
         // 疾跑模式下按 W 前进：跑步动画 + 疾跑速度
         targetState = PlayerState::RUN;
-        currentSpeed = baseSpeed * 2.0f;
+        currentSpeed = SprintSpeed;
     }
     else
     {
@@ -245,7 +257,7 @@ void Player::UpdateMovementState(bool isMoving, bool isMovingForward)
         {
             // 疾跑模式下按 S/A/D 或组合键（不含 W）：行走速度 + 行走动画
             targetState = PlayerState::WALK;
-            currentSpeed = baseSpeed;
+            currentSpeed = WalkSpeed;
         }
         else
         {
@@ -258,7 +270,7 @@ void Player::UpdateMovementState(bool isMoving, bool isMovingForward)
     // 潜行时模型视觉下降
     m_TargetYOffset = IsSneaking ? -0.08f : 0.0f;
 
-    if (m_CurrentState != targetState)
+    if (m_CurrentState != targetState && m_AttackAnimTimer <= 0.0f)
     {
         m_CurrentState = targetState;
 
@@ -283,13 +295,28 @@ void Player::UpdateMovementState(bool isMoving, bool isMovingForward)
 
 void Player::TryAttack()
 {
-    if (m_Animator.IsOverlayPlaying())
+    // 蹲下攻击用全身体基动画（非 overlay），需要等待播放完才能再次攻击
+    if (m_AttackAnimTimer > 0.0f)
         return;
 
     std::string animKey = IsSneaking ? "sneak_attack" : "attack";
     auto it = m_Animations.find(animKey);
     if (it != m_Animations.end())
-        m_Animator.PlayOverlay(it->second);
+    {
+        if (IsSneaking)
+        {
+            // 蹲下攻击：全身体动画，替换基动画（不循环）
+            m_Animator.PlayAnimation(it->second);
+            m_AttackAnimTimer = it->second->GetDuration() / it->second->GetTicksPerSecond();
+        }
+        else
+        {
+            // 站立攻击：overlay 模式（仅手臂，不打断行走/待机）
+            if (m_Animator.IsOverlayPlaying())
+                return;
+            m_Animator.PlayOverlay(it->second);
+        }
+    }
     else
         LOG("WARNING: Attack animation '%s' not found", animKey.c_str());
 }

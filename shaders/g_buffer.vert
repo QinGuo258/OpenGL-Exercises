@@ -14,6 +14,8 @@ uniform float uTime;
 uniform float uRainIntensity;
 uniform float uWindPhase;
 uniform int uMaterialType;
+uniform float uWindBaseStrength;  // 基础风力强度 (tuning.json)
+uniform float uWindRainStrength;  // 雨天附加风力 (tuning.json)
 
 void main() {
     vec4 worldPos = uModel * vec4(aPos, 1.0);
@@ -21,7 +23,7 @@ void main() {
     // 风力摇摆：uMaterialType 1=草丛(底部锚定), 2=树叶(整体抖动)
     // 必须与 model.vert 保持完全一致，否则 SSAO 会在错误位置计算遮蔽
     if (uMaterialType == 1 || uMaterialType == 2) {
-        float windStrength = 0.05 + uRainIntensity * 0.05;
+        float windStrength = uWindBaseStrength + uRainIntensity * uWindRainStrength;
 
         // 草丛底部锚定不动 (aTexCoords.y≈0 为根部)，树叶整体 0.8 权重抖动
         float windWeight = (uMaterialType == 1) ? aTexCoords.y : 0.8;
