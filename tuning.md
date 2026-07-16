@@ -13,31 +13,131 @@
 
 以下参数修改后按 **F1** 即时生效，无需编译：
 
-| 参数名 | 默认值 | 类型 | 说明 |
-|--------|--------|------|------|
-| `dayLight` | `[1.3, 1.15, 0.95]` | vec3 | 日光颜色 |
-| `sunsetLight` | `[1.0, 0.4, 0.1]` | vec3 | 日落光色 |
-| `moonLight` | `[0.01, 0.02, 0.04]` | vec3 | 月光颜色 |
-| `dayAmbient` | `[0.25, 0.35, 0.50]` | vec3 | 白昼环境光 |
-| `nightAmbient` | `[0.02, 0.02, 0.06]` | vec3 | 夜环境光 |
-| `dayHorizon` | `[0.55, 0.75, 0.95]` | vec3 | 白天地平线色 |
-| `dayZenith` | `[0.15, 0.35, 0.80]` | vec3 | 白天天顶色 |
-| `sunsetHorizon` | `[1.0, 0.45, 0.2]` | vec3 | 黄昏地平线 |
-| `sunsetZenith` | `[0.3, 0.1, 0.35]` | vec3 | 黄昏天顶 |
-| `nightHorizon` | `[0.05, 0.05, 0.12]` | vec3 | 夜景地平线 |
-| `nightZenith` | `[0.0, 0.0, 0.02]` | vec3 | 夜景天顶 |
-| `bloomIntensity` | `0.35` | float | Bloom 混合强度 |
-| `exposure` | `0.5` | float | HDR 曝光度 |
-| `godrayWeight` | `0.015` | float | 上帝光整体强度 |
-| `godrayDensity` | `1.0` | float | 上帝光拉扯距离 |
-| `godrayDecay` | `0.92` | float | 上帝光衰减速度 |
-| `ssrMaxDistance` | `15.0` | float | SSR 光线最大距离 |
-| `ssrRaySteps` | `40` | int | SSR 步进步数 |
-| `ssrRefinementSteps` | `4` | int | SSR 二分精炼次数 |
-| `specularStrength` | `0.5` | float | 镜面高光强度 |
-| `shininess` | `32.0` | float | 高光锐利度 |
-| `defaultFov` | `45.0` | float | 默认 FOV |
-| `sprintFov` | `55.0` | float | 疾跑 FOV |
+### 光照颜色 (vec3)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `dayLight` | `[1.3, 1.15, 0.95]` | 日光颜色 |
+| `sunsetLight` | `[1.0, 0.4, 0.1]` | 日落光色 |
+| `moonLight` | `[0.01, 0.02, 0.04]` | 月光颜色 |
+| `dayAmbient` | `[0.25, 0.35, 0.50]` | 白昼环境光 |
+| `nightAmbient` | `[0.02, 0.02, 0.06]` | 夜环境光 |
+| `dayHorizon` | `[0.55, 0.75, 0.95]` | 白天地平线色 |
+| `dayZenith` | `[0.15, 0.35, 0.80]` | 白天天顶色 |
+| `sunsetHorizon` | `[1.0, 0.45, 0.2]` | 黄昏地平线 |
+| `sunsetZenith` | `[0.3, 0.1, 0.35]` | 黄昏天顶 |
+| `nightHorizon` | `[0.05, 0.05, 0.12]` | 夜景地平线 |
+| `nightZenith` | `[0.0, 0.0, 0.02]` | 夜景天顶 |
+
+### 阴影映射 (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `shadowLightDistance` | `50.0` | 光源摄像机距离（米） |
+| `shadowOrthoSize` | `40.0` | 正交投影半边长（米） |
+| `shadowNearPlane` | `1.0` | 近裁剪面（米） |
+| `shadowFarPlane` | `100.0` | 远裁剪面（米） |
+
+### SSAO (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `ssaoRadius` | `3.0` | 采样半径（米） |
+| `ssaoBias` | `0.02` | 深度偏移消除自阴影（米） |
+
+### 点光源 (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `pointLightMaxRange` | `12.0` | 最大照射距离（米） |
+| `pointLightAttenLinear` | `0.14` | 线性衰减系数 |
+| `pointLightAttenQuad` | `0.07` | 二次衰减系数 |
+| `pointLightEdgeFade` | `4.0` | 边缘淡出距离（米） |
+| `pointLightIntensity` | `0.8` | 亮度倍率 |
+
+### 大气雾 (float + vec3)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `fogDensityClear` | `0.0025` | 晴天雾密度 |
+| `fogDensityRain` | `0.005` | 雨天雾密度 |
+| `fogColorClear` | `[0.6, 0.8, 0.95]` | 晴天雾色 RGB |
+| `fogColorRain` | `[0.4, 0.45, 0.5]` | 雨天雾色 RGB |
+
+### 体积云 (float + int)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `cloudViewSteps` | `16` | 视线步进次数 |
+| `cloudLightSteps` | `2` | 光源步进次数 |
+| `cloudMinHeight` | `300.0` | 云层底部高度（米） |
+| `cloudMaxHeight` | `550.0` | 云层顶部高度（米） |
+
+### 天气/风力 (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `rainTransitionSpeed` | `0.2` | 降雨强度过渡速率 |
+| `windBaseSpeed` | `2.0` | 风力基础速度 |
+| `windRainSpeed` | `4.0` | 雨天风力附加速度 |
+| `windBaseStrength` | `0.05` | 风力基础强度（植被摆幅） |
+| `windRainStrength` | `0.05` | 雨天风力附加强度 |
+| `rainOverallDarken` | `0.3` | 雨天画面压暗系数 |
+
+### 后处理 (float + int)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `bloomIntensity` | `0.35` | Bloom 混合强度 |
+| `exposure` | `0.5` | HDR 曝光度 |
+| `godrayWeight` | `0.018` | 上帝光整体强度 |
+| `godrayDensity` | `1.0` | 上帝光拉扯距离 |
+| `godrayDecay` | `0.93` | 上帝光衰减速度 |
+| `bloomBlurIterations` | `6` | 高斯模糊迭代次数 |
+| `saturation` | `1.25` | 饱和度增强 |
+
+### SSR (float + int)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `ssrMaxDistance` | `30.0` | 光线最大距离（米） |
+| `ssrRaySteps` | `40` | 步进步数 |
+| `ssrRefinementSteps` | `4` | 二分精炼次数 |
+
+### 材质 (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `specularStrength` | `0.5` | 镜面高光强度 |
+| `shininess` | `32.0` | 高光锐利度 |
+
+### 摄像机 (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `defaultFov` | `45.0` | 默认 FOV |
+| `sprintFov` | `55.0` | 疾跑 FOV |
+| `fovInterpSpeed` | `8.0` | FOV 过渡速率 |
+
+### 玩家物理 (float)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `walkSpeed` | `4.0` | 行走速度（米/秒） |
+| `sprintSpeed` | `8.0` | 疾跑速度（米/秒） |
+| `sneakSpeed` | `2.0` | 潜行速度（米/秒） |
+| `eatSpeed` | `1.6` | 进食时移动速度（米/秒） |
+| `jumpForce` | `6.0` | 跳跃初速度（米/秒） |
+| `gravity` | `-19.6` | 重力加速度（米/秒²） |
+| `playerMaxHP` | `20` | 最大生命值 |
+| `eatingHealAmount` | `4` | 进食回复量（HP） |
+| `eatingChargeTime` | `1.5` | 进食蓄力时间（秒） |
+| `playerImmunityTime` | `0.5` | 受伤无敌时间（秒） |
+
+### 战斗 (float + int)
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `attackMaxRange` | `3.5` | 攻击最大距离（米） |
+| `swordDamage` | `7` | 剑伤害 |
+| `emptyHandDamage` | `1` | 空手伤害 |
+| `sweepAoeDamage` | `3` | 剑气 AOE 伤害 |
+| `sweepAoeRange` | `3.0` | 剑气 AOE 水平范围（米） |
+| `sweepAoeCone` | `0.707` | 剑气 AOE 锥角（cos 值） |
+| `knockbackHorizontal` | `5.0` | 击退水平力度 |
+| `knockbackVertical` | `4.5` | 击退垂直力度 |
+| `zombieBiteRange` | `1.5` | 僵尸撕咬距离（米） |
+| `zombieBiteDamage` | `2` | 僵尸撕咬伤害 |
+| `zombieAttackCooldown` | `1.5` | 僵尸攻击冷却（秒） |
+| `playerKnockbackHorizontal` | `5.0` | 玩家被咬击退水平 |
+| `playerKnockbackVertical` | `3.5` | 玩家被咬击退垂直 |
 
 ---
 
@@ -67,12 +167,13 @@
 
 ### 体积云
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| 云层高度 | `sky.frag:154-155` | `cloudMin = 300.0`, `cloudMax = 550.0` (米) |
-| 视步数 | `sky.frag:161` | `steps = 16` — 越多云层越精细（更吃性能） |
-| 光源步数 | `sky.frag:197` | `lightSteps = 2` — 自阴影精度 |
-| 云密度阈值 | `sky.frag:44` | `threshold = mix(0.3, 0.2, uRainIntensity)` — 越小云越密 |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `cloudViewSteps` | `16` | 视线步进次数 — 越多云层越精细 |
+| `cloudLightSteps` | `2` | 光源步进次数 — 自阴影精度 |
+| `cloudMinHeight` | `300.0` | 云层底部高度（米） |
+| `cloudMaxHeight` | `550.0` | 云层顶部高度（米） |
+| `cloudDensityThreshold` | `mix(0.3, 0.2, rain)` | 下雨时阈值降低，云连成一片 |
 | 风向速度 | `sky.frag:38` | `uvw.x += time * 0.005` — 风吹快慢 |
 
 ### 星星
@@ -110,12 +211,17 @@
 
 ### 点光源 (火把/灯笼/岩浆)
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| 衰减半径 | `model.frag:259` | `maxDist = 12.0` (米) |
-| 衰减系数 | `model.frag:266` | `1/(1 + 0.14d + 0.07d²)` |
-| 火光颜色 | `model.frag:253` | `fireColor = (0.7, 0.45, 0.2)` |
-| 最大光源数 | `model.frag:39` | `#define MAX_POINT_LIGHTS 512` |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `pointLightMaxRange` | `12.0` | 衰减半径（米） |
+| `pointLightAttenLinear` | `0.14` | 线性衰减系数（1/d 项） |
+| `pointLightAttenQuad` | `0.07` | 二次衰减系数（1/d² 项） |
+| `pointLightEdgeFade` | `4.0` | 边缘淡出距离（米） |
+| `pointLightIntensity` | `0.8` | 亮度倍率 |
+| 火光颜色 | shader 硬编码 | `fireColor = (0.7, 0.45, 0.2)` |
+| 最大光源数 | shader 硬编码 | `#define MAX_POINT_LIGHTS 512` |
+
+手持火把（slot 1）：第一人称光源跟随摄像机、第三人称在玩家右前方偏上。静态光源从自发光网格顶点 0.5m 聚类提取。
 
 ---
 
@@ -212,10 +318,14 @@
 
 ### 植被风摆
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| 风速度基值 | `model.vert` | `windSpeed = 2.0 + uRainIntensity * 4.0` |
-| 风强度 | `model.vert` | `windStrength = 0.05 + uRainIntensity * 0.05` |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `windBaseSpeed` | `2.0` | 基础风速 |
+| `windRainSpeed` | `4.0` | 雨天附加风速 |
+| `windBaseStrength` | `0.05` | 基础风力强度（摆动幅度） |
+| `windRainStrength` | `0.05` | 雨天附加风力强度 |
+
+草根锚定（`windWeight = texCoords.y`），树叶整体摆动（`windWeight = 0.8`）。G-Buffer、Shadow 着色器使用相同参数保持风摆同步。
 
 ---
 
@@ -240,11 +350,20 @@
 
 ## 七、SSAO (环境光遮蔽)
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| 采样半径 | `ssao.frag:26` | `radius = 0.5` |
-| 采样偏移 | `ssao.frag:27` | `bias = 0.025` |
-| 使用采样数 | `ssao.frag:29` | `i < 16` (前 16 个内核) |
+### 热重载参数 ★
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ssaoRadius` | `3.0` | 采样半径（米），越大遮蔽范围越广 |
+| `ssaoBias` | `0.02` | 深度偏移（米），消除表面自阴影 |
+
+### 实现要点
+
+- G-Buffer 中已排除玩家身体和手持物品——动态实体不写入，防止幽灵 SSAO 光晕
+- 主场景渲染时玩家/物品的 `uDisableSsao = true`，直接跳过 SSAO 采样
+- 植被材质（type 1/2）降低 SSAO 强度（30%/50%），防止薄片几何体自遮蔽过深
+- 64 点半球采样核，shader 跨步 stride=4 取 16 个，4×4 噪声纹理 TBN 旋转
+- 结果经 4×4 盒式模糊去噪后供 `model.frag` 采样
 
 ---
 
@@ -269,9 +388,13 @@
 
 ## 九、大气雾
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| 晴天雾密度 | `model.frag:285` | `mix(0.0005, 0.005, uRainIntensity)` — 改 0.0005 |
-| 雨天雾密度 | `model.frag:285` | 同上 0.005 |
-| 晴天雾颜色 | `model.frag:288` | `mix(vec3(0.6,0.8,0.95), ...)` |
-| 雨天雾颜色 | `model.frag:288` | 同上 `vec3(0.4,0.45,0.5)` |
+### 热重载参数 ★
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `fogDensityClear` | `0.0025` | 晴天雾密度 |
+| `fogDensityRain` | `0.005` | 雨天雾密度 |
+| `fogColorClear` | `[0.6, 0.8, 0.95]` | 晴天雾色 RGB（淡蓝） |
+| `fogColorRain` | `[0.4, 0.45, 0.5]` | 雨天雾色 RGB（阴灰） |
+
+密度和颜色通过 `uRainIntensity` 在晴雨天之间平滑插值。指数平方衰减：`exp(-(dist × density)²)`。

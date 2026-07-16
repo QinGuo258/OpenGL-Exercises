@@ -150,7 +150,8 @@
 
 ### `g_buffer_skinned.vert`
 
-**用途**：骨骼动画模型的 G-Buffer 几何预填充（玩家/敌人/箭矢/手持物品/第一人称手臂）。
+**用途**：骨骼动画模型的 G-Buffer 几何预填充（仅敌怪和箭矢）。
+**注意**：玩家身体和手持物品已从 G-Buffer 中排除（所有视角），防止动态实体在 SSAO 中产生幽灵遮蔽光晕。
 
 | 输入属性 | 位置 | 类型 |
 |----------|------|------|
@@ -303,10 +304,18 @@ gl_Position = (uProjection * uView * vec4(aPos, 1.0)).xyww;
 | `uDiffuseTexture` | `sampler2D` | 漫反射纹理 |
 | `uHasDiffuseTexture` | `bool` | 是否有漫反射纹理 |
 | `uIsHit` | `bool` | 受击闪红开关（仅敌人使用） |
+| `uDisableSsao` | `bool` | 设为 true 跳过 SSAO 采样（玩家/FP 手臂） |
 | `uTime` | `float` | 运行时间（水面法线动画） |
+| `uWindPhase` | `float` | 风力相位累积值 |
 | `uNightFade` | `float` | 夜色系数（C++ 根据 sunY 计算，0=白天, 1=深夜） |
 | `uHorizonColor` | `vec3` | 天空地平线实时颜色（水面反射） |
 | `uZenithColor` | `vec3` | 天空天顶实时颜色（水面反射） |
+| `uFogDensityClear` | `float` | 晴天雾密度（tuning.json, 默认 0.0025） |
+| `uFogDensityRain` | `float` | 雨天雾密度（tuning.json, 默认 0.005） |
+| `uFogColorClear` | `vec3` | 晴天雾色 RGB（tuning.json） |
+| `uFogColorRain` | `vec3` | 雨天雾色 RGB（tuning.json） |
+| `uWindBaseStrength` | `float` | 基础风力强度（tuning.json, 默认 0.05） |
+| `uWindRainStrength` | `float` | 雨天附加风力（tuning.json, 默认 0.05） |
 | `uPackedNoiseMap` | `sampler2D` | 打包噪点图（R=大波浪, G=小波纹） |
 | `uShadowMap` | `sampler2D` | 4096² 阴影贴图（纹理单元 15） |
 | `uLightSpaceMatrix` | `mat4` | 法线偏移阴影重投影矩阵 |
@@ -553,8 +562,10 @@ skyColor = mix(uHorizonColor, uZenithColor, clamp(viewDir.y, 0, 1));
 
 | Uniform | 用途 |
 |---------|------|
-| `samples[64]` | C++ 预生成的 64 个半球采样向量（shader 只用前 16 个） |
+| `samples[64]` | C++ 预生成的 64 个半球采样向量（shader stride=4 取 16 个） |
 | `projection` | 投影矩阵（视图空间 → 屏幕空间变换） |
+| `uRadius` | **新增** — 采样半径（tuning.json, 默认 3.0m） |
+| `uBias` | **新增** — 深度偏移（tuning.json, 默认 0.02m） |
 
 **核心逻辑**：
 
@@ -611,6 +622,7 @@ skyColor = mix(uHorizonColor, uZenithColor, clamp(viewDir.y, 0, 1));
 | `uBloomTex` | 模糊后光晕纹理 | 6 次高斯模糊后的 Bloom |
 | `uBloomIntensity` | `0.35` | Bloom 混合权重 |
 | `uExposure` | `0.5` | 曝光度 |
+| `uSaturation` | **新增** — tuning.json | 饱和度增强（默认 1.25） |
 
 **5 步管线**：
 

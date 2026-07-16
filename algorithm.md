@@ -36,8 +36,8 @@
 - **说明**: 16 点泊松圆盘采样 + 每像素随机旋转矩阵 (`rand(gl_FragCoord.xy)` → `mat2`) + `filterRadius=2.5`。两步偏移消除自阴影：法线偏移 (0.035m) + 动态 bias `max(0.005*(1-N·L), 0.0005)`。16 次 PCF 取平均实现柔和半影过渡。
 
 ### 1.4 屏幕空间环境光遮蔽 (SSAO)
-- **文件**: `shaders/ssao.frag`、`shaders/ssao_blur.frag`、`shaders/g_buffer.vert/frag`、`shaders/g_buffer_skinned.vert`、`src/main.cpp` (第 1520–1580 行)
-- **说明**: 三通道系统 — (1) G-Buffer 输出视空间位置+法线 (RGBA16F×2 + DEPTH24)； (2) 16 点半球采样 + TBN 噪声旋转（Gram-Schmidt 正交化）+ 视空间投影回屏幕 + `smoothstep` 范围检查，遮蔽值 = 1 - (遮挡数/16)； (3) 4×4 盒式模糊去噪。SSAO 仅衰减环境光，不触碰漫反射/镜面反射/点光源。64 点内核取前 16，4×4 噪声纹理 `GL_REPEAT` 平铺。
+- **文件**: `shaders/ssao.frag`、`shaders/ssao_blur.frag`、`shaders/g_buffer.vert/frag`、`shaders/g_buffer_skinned.vert`、`src/main.cpp`
+- **说明**: 三通道系统 — (1) G-Buffer 输出视空间位置+法线 (RGBA16F×2 + DEPTH24)，**玩家身体和手持物品不写入**，防止动态实体产生幽灵 SSAO 光晕； (2) 16 点半球采样 + TBN 噪声旋转（Gram-Schmidt 正交化）+ 视空间投影回屏幕 + `smoothstep` 范围检查，采样半径 `uRadius` 和偏移 `uBias` 从 tuning.json 读取； (3) 4×4 盒式模糊去噪。SSAO 仅衰减环境光，不触碰漫反射/镜面反射/点光源。植被材质（type 1/2）降低 SSAO 强度至 30%/50%。主场景渲染时玩家/物品 `uDisableSsao = true` 直接跳过 SSAO 采样。
 
 ### 1.5 G-Buffer 延迟几何预渲染
 - **文件**: `shaders/g_buffer.vert/frag`、`shaders/g_buffer_skinned.vert` + `shaders/g_buffer.frag`、`src/main.cpp` (Pass 1.5)
@@ -159,8 +159,8 @@ ssrColor *= edgeFade × distAtten;
 - **说明**: `pow(result, vec3(1.0/2.4))`，sRGB 标准 gamma。必须在所有颜色计算之后执行，匹配显示器的非线性 EOTF 响应。
 
 ### 2.9 大气距离雾 (Exponential-Squared Distance Fog)
-- **文件**: `shaders/model.frag` (第 279–285 行)
-- **说明**: `fogFactor = exp(-pow(dist × density, 2.0))`。指数平方使近景几乎不受影响、中远景逐渐起雾、远景完全覆盖。晴天密度 0.0005 雾色淡蓝 `(0.6,0.8,0.95)`，雨天密度 0.005 雾色阴灰 `(0.4,0.45,0.5)`，随 `uRainIntensity` 平滑插值。
+- **文件**: `shaders/model.frag`、`shaders/tuning.json`
+- **说明**: `fogFactor = exp(-pow(dist × density, 2.0))`。指数平方使近景几乎不受影响、中远景渐起雾、远景完全覆盖。晴天密度 `fogDensityClear`（默认 0.0025）雾色 `fogColorClear` 淡蓝，雨天密度 `fogDensityRain`（默认 0.005）雾色 `fogColorRain` 阴灰，随 `uRainIntensity` 平滑插值。全部参数从 tuning.json 读取，F1 热重载。
 
 ---
 
@@ -319,6 +319,8 @@ density(u, v, w, h, t):
   threshold = mix(0.3, 0.2, uRainIntensity) // 雨天阈值更低 → 云更浓密
   return smoothstep(threshold, threshold+0.4, n × mask)
 ```
+
+云层高度 (`cloudMinHeight`/`cloudMaxHeight`)、视线步数 (`cloudViewSteps`)、光源步数 (`cloudLightSteps`) 均从 tuning.json 读取，F1 热重载。
 
 ---
 
@@ -675,22 +677,22 @@ Pass 5 — 雨滴渲染:
 
 ```
 if (uMaterialType == 1 || uMaterialType == 2):  // 只对草和树叶启用
-  windSpeed = 2.0 + uRainIntensity × 4.0         // 晴天 2.0, 暴雨 6.0
-  windStrength = 0.05 + uRainIntensity × 0.05    // 晴天 0.05, 暴雨 0.10
+  windSpeed    = windBaseSpeed + uRainIntensity × windRainSpeed       // tuning.json
+  windStrength = windBaseStrength + uRainIntensity × windRainStrength // tuning.json
 
   windWeight = (type==1) ? texCoords.y : 0.8
   // 草丛: 根部不摇 (y≈0 → weight=0)，顶部摆动最大
   // 树叶: 整体均匀摆动 (weight=0.8)
 
-  worldPos.x += sin(worldPos.x×2 + time×windSpeed) × windStrength × windWeight
-  worldPos.z += cos(worldPos.z×2 + time×windSpeed) × windStrength × windWeight
+  worldPos.x += sin(worldPos.x×2 + windPhase) × windStrength × windWeight
+  worldPos.z += cos(worldPos.z×2 + windPhase) × windStrength × windWeight
 ```
 
-`sin` 和 `cos` 使用不同的空间轴（X 和 Z），防止同一方向上两个频率耦合形成肉眼可见的周期性条纹。雨天加速风以加重氛围。
+风力参数从 tuning.json 读取（`windBaseSpeed`/`windRainSpeed`/`windBaseStrength`/`windRainStrength`），使用 `windPhase` 累积值替代 `uTime × windSpeed`，避免降雨过渡时 d(windSpeed)/dt 项被巨大的 uTime 放大产生频率尖峰。
 
-#### 两个 Pass 的同步
+#### 多个 Pass 的同步
 
-G-Buffer 的 `g_buffer.vert` 包含完全相同的风摆代码（参数硬编码一致），否则 SSAO 采样位置和最终渲染位置不一致，出现错位遮蔽。
+G-Buffer (`g_buffer.vert`)、Shadow Map (`shadow.vert`) 包含完全相同的风摆代码和参数，确保 SSAO 遮蔽和阴影形状与可见几何体匹配。参数从 tuning.json 统一读取，F1 热重载时全部 Pass 同步更新。
 
 ---
 
@@ -1294,21 +1296,21 @@ UpdateAI (每帧):
 
 ### 10.1 玩家 5 状态有限状态机
 
-- **文件**: `src/Player.cpp` (第 209–281 行 `UpdateMovementState()`)
+- **文件**: `src/Player.cpp` (第 223–282 行 `UpdateMovementState()`)
 
 #### 状态转换规则
 
 ```
-            Sneak + Moving → SNEAK_WALK (2.0)
+            Sneak + Moving → SNEAK_WALK (SneakSpeed)
   WALK ─────────────────────────────────────
-  (4.0)   Eating + Moving → WALK (1.6)
-   │      Ctrl+W + Forward → RUN (8.0)
-   │      S/A/D without W  → WALK (4.0)
+  (WalkSpeed)  Eating + Moving → WALK (EatSpeed)
+   │      Ctrl+W + Forward → RUN (SprintSpeed)
+   │      S/A/D without W  → WALK (WalkSpeed)
    │      停止移动          → IDLE (0.0)
-   ▼                                           Sneak + Stop → SNEAK_IDLE (0.0)
+   ▼                                Sneak + Stop → SNEAK_IDLE (0.0)
 ```
 
-核心约束：疾跑模式（`IsRunningMode=true`）只在**按住 W** 时生效。若按 S/A/D 或停止移动，即使 `IsRunningMode=true` 也不进入 Run 状态。
+所有速度从 `Player` 成员变量读取（`WalkSpeed`/`SprintSpeed`/`SneakSpeed`/`EatSpeed`），在启动和 F1 热重载时从 `tuning.json` 同步。疾跑模式仅在按住 W 时生效。蹲下攻击时播放全身体（非 overlay）`sneak_attack` 动画，期间锁定移动状态，动画播完后自动切回蹲姿。
 
 #### FOV 联动
 
@@ -1332,7 +1334,7 @@ currentFOV = mix(currentFOV, targetFOV, dt × 8.0)  // 8.0 速度平滑过渡
 
 ```
 射线: P(t) = playerPos + cameraEyeOffset + t × cameraFront
-最大范围: 3.5m
+最大范围: attackMaxRange (tuning.json, 默认 3.5m)
 
 对每个敌人:
   AABB: [Pos.x-0.4, Pos.x+0.4] × [Pos.y, Pos.y+1.8] × [Pos.z-0.4, Pos.z+0.4]
@@ -1347,6 +1349,8 @@ currentFOV = mix(currentFOV, targetFOV, dt × 8.0)  // 8.0 速度平滑过渡
     if tNear ≤ tFar && tFar > 0:
       命中! 取 tNear 最小的敌人
 ```
+
+战斗参数（伤害、击退、AOE 范围等）均从 `tuning.json` 读取，F1 热重载生效。
 
 ---
 
