@@ -49,6 +49,7 @@ CMake POST_BUILD copies `shaders/`, `models/`, `textures/`, `audio/`, and `fonts
 | F2 | Open time-of-day quick-select panel (4 buttons: 正午/黄昏/午夜/清晨 around screen center). Click a button to jump to that time. Mouse unlocked while open; mutually exclusive with T chat history |
 | F5 | Cycle camera mode (FirstPerson / ThirdPersonBack / ThirdPersonFront) |
 | F6 | Toggle collision debug wireframe |
+| F8 | Toggle HUD visibility (hotbar, hearts, crosshair, first-person arm & held item). Chat log, debug overlay (F3), time panel (F2), and menus are unaffected |
 | R | Toggle rain on/off (2s smooth transition) |
 | F3 | Toggle debug overlay (XYZ coordinates + FPS, top-left) |
 | T | Toggle chat history overlay (shows last 12 messages; locks mouse & movement while open) |
@@ -58,7 +59,7 @@ CMake POST_BUILD copies `shaders/`, `models/`, `textures/`, `audio/`, and `fonts
 
 `src/` directory:
 
-- **main.cpp** — Entry point: GLFW/GLAD init, window 1920×1080, 8 FBOs (shadow, rain depth, G-Buffer, SSAO, SSAO blur, HDR, Bloom ping-pong ×2), skybox VAO, rain VAO (VBO-less), uiVAO (2D UI), fullscreenVAO, Player, arm Model+Animator, ThirdPersonCamera, CollisionWorld, hotbar models+icons, all Shader objects, audio engine, enemy management, arrow container, particle systems, full multi-pass render loop. Also contains: **GameState** (MENU/PLAYING), **StoryState** (6-stage scripted story), chat/message system, player HP/hearts, eating mechanic, death smoke & sweep particles.
+- **main.cpp** — Entry point: GLFW/GLAD init, window 1920×1080, 8 FBOs (shadow, rain depth, G-Buffer, SSAO, SSAO blur, HDR, Bloom ping-pong ×2), skybox VAO, rain VAO (VBO-less), uiVAO (2D UI), fullscreenVAO, Player, arm Model+Animator, ThirdPersonCamera, CollisionWorld, hotbar models+icons, all Shader objects, audio engine, enemy management, arrow container, particle systems, full multi-pass render loop. Also contains: **GameState** (MENU/PLAYING), **StoryState** (6-stage scripted story), chat/message system, player HP/hearts, eating mechanic, **F8 hide HUD** (hotbar/hearts/crosshair/FP arm), death smoke & sweep particles.
 - **Audio.cpp** — miniaudio implementation unit (`#define MINIAUDIO_IMPLEMENTATION` + `#include "miniaudio.h"`). Isolated from main.cpp to avoid recompiling the large audio library on every change.
 - **FontRenderer.h/.cpp** — UTF-8 TrueType font rendering: bakes ASCII (32–126), CJK punctuation (0x3000–0x303F), and CJK Unified (0x4E00–0x9FFF) into an 8192×8192 GL_RED atlas via `stb_truetype.h`. `RenderText()` handles UTF-8 → codepoint decoding, per-character quad generation with atlas UV offset/scale, and shader state fencing (uIsFont, uUvScale, uUvOffset).
 - **font_baker.h/.c** — C wrapper around `stb_truetype.h` for font atlas baking. Compiled as C (not C++) via `set_source_files_properties`. Calls `stbtt_PackFontRanges` for 3 Unicode ranges (95 + 64 + 20992 chars = 21151 total).
@@ -132,7 +133,7 @@ Particles (after scene, before skybox):
 Pass 3 — Skybox (LEQUAL depth, Z=1.0):
  32. skyShader → unit cube VAO
 
-Pass 4 — First-Person Arm (only in FirstPerson mode, after skybox):
+Pass 4 — First-Person Arm (only in FirstPerson mode, after skybox, skipped when F8 hideUI):
  33. glClear(GL_DEPTH_BUFFER_BIT), uView=identity, arm or held item
 
 Pass 5 — Procedural Rain (if rainIntensity > 0.01):
@@ -140,7 +141,7 @@ Pass 5 — Procedural Rain (if rainIntensity > 0.01):
 
 Pass 6 — 2D UI (orthographic projection):
  35. uiShader, uProjection=ortho(0,1920,0,1080), draw order:
-     story black-screen overlay (if blackScreenAlpha > 0) → main menu (if MENU) → hotbar → selection box → heart HUD → item icons → crosshair (FP only) → chat log (fading, bottom-left) or chat history panel (T key, semi-transparent bg) → F3 debug (XYZ + FPS)
+     story black-screen overlay (if blackScreenAlpha > 0) → main menu (if MENU) → hotbar / selection box / heart HUD / item icons / crosshair (FP only, all skipped when F8 hideUI) → chat log (fading, bottom-left) or chat history panel (T key, semi-transparent bg) → F3 debug (XYZ + FPS)
  36. Font rendering: `FontRenderer::RenderText()` sets `uIsFont=true`, `uFontColor`, and per-character `uUvScale`/`uUvOffset` from atlas; fences back to `uIsFont=false` after. Font atlas bound to GL_TEXTURE0, uses GL_RED single-channel format.
 
 Post-Processing:

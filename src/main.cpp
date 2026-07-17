@@ -115,6 +115,10 @@ bool tKeyPressed = false;
 bool isTimeSelectOpen = false;
 bool f2KeyPressed = false;
 
+// F8 隐藏 UI（快捷栏 / 血条 / 准星）
+bool hideUI = false;
+bool f8KeyPressed = false;
+
 void AddChatMessage(const std::string& message) {
     chatLog.push_back({ message, 5.0f });
     if (chatLog.size() > 6) chatLog.erase(chatLog.begin());
@@ -521,6 +525,17 @@ void processInput(GLFWwindow* window, Player& player, std::vector<Enemy>& enemie
         f3KeyPressed = false;
     }
 
+    // F8 键切换 UI 显示（快捷栏 / 血条 / 准星）
+    if (glfwGetKey(window, GLFW_KEY_F8) == GLFW_PRESS) {
+        if (!f8KeyPressed) {
+            hideUI = !hideUI;
+            f8KeyPressed = true;
+            printf("[F8] UI: %s\n", hideUI ? "HIDDEN" : "VISIBLE");
+        }
+    } else {
+        f8KeyPressed = false;
+    }
+
 
     thirdPersonCamera.SetSneakOffset(player.GetVisualYOffset());
     thirdPersonCamera.TargetPosition = player.Position;
@@ -615,7 +630,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         }
         // 清晨
         else if (mouseX >= 630.0f && mouseX <= 910.0f && mouseY >= 470.0f && mouseY <= 540.0f) {
-            targetTime = 0.17444f;   // 10° 
+            targetTime = 0.08744f;   // 5° 
             label = "清晨";
         }
         // 黄昏
@@ -2379,7 +2394,7 @@ int main()
         // ======================================================================
         // 第一人称手臂渲染（清空深度，始终在最前面）
         // ======================================================================
-        if (thirdPersonCamera.CurrentMode == CameraMode::FirstPerson)
+        if (thirdPersonCamera.CurrentMode == CameraMode::FirstPerson && !hideUI)
         {
             glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -2696,6 +2711,7 @@ int main()
             if (currentGameState == GameState::PLAYING)
             {
 
+            if (!hideUI) {
             // 1. 渲染 9 格快捷栏底框（原版 182x22 放大 4 倍 = 728x88）
             float scaleFactor = 4.0f;
             float hbWidth = 182.0f * scaleFactor;
@@ -2802,6 +2818,8 @@ int main()
                 uiShader.SetMat4("uModel", model);
                 crosshairTex.Bind(0);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+
             }
 
             // 5. 左下角聊天栏 / 系统提示渲染
